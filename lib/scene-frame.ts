@@ -15,7 +15,9 @@ function waitForVideo(video: HTMLVideoElement, eventName: "loadedmetadata" | "se
   });
 }
 
-export async function captureLastSceneFrameFromUrl(url: string): Promise<Blob> {
+export type SceneHandoff = { frame: Blob; cutMs: number };
+
+export async function captureSceneHandoffFromUrl(url: string): Promise<SceneHandoff> {
   const video = document.createElement("video");
   video.preload = "auto";
   video.muted = true;
@@ -60,14 +62,20 @@ export async function captureLastSceneFrameFromUrl(url: string): Promise<Blob> {
       await seeked;
     }
     context.drawImage(video, 0, 0, canvas.width, canvas.height);
-    return await new Promise<Blob>((resolve, reject) => {
+    const frame = await new Promise<Blob>((resolve, reject) => {
       canvas.toBlob((blob) => blob ? resolve(blob) : reject(new Error("Could not capture the next scene frame.")), "image/png");
     });
+    return { frame, cutMs: Math.min(8000, Math.max(500, Math.round(bestTime * 1000))) };
   } finally {
     video.pause();
     video.removeAttribute("src");
     video.load();
   }
+}
+
+// The original single-tab demo still consumes only the image.
+export async function captureLastSceneFrameFromUrl(url: string): Promise<Blob> {
+  return (await captureSceneHandoffFromUrl(url)).frame;
 }
 
 export function captureLastSceneFrame(jobId: string): Promise<Blob> {

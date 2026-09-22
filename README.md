@@ -20,13 +20,17 @@ pnpm install
 pnpm dev
 ```
 
+The continuity checks in `tests/story-continuity.test.ts` cover prompt memory, scene-timeline cuts, and playback seeking.
+
 ## Live behavior
 
 - One server-controlled story and video timeline are shared by all viewers.
+- The next scene receives the search goal and up to twelve previous audience actions. The supplied frame remains the visual source of truth; this first-pass memory does not analyze the generated video itself.
+- A scene's last usable frame is also its playback cut, so the next scene begins where the previous one visibly ends.
 - Signed-in viewers can submit comments. The server rate-limits, moderates, and classifies them before showing them or counting them as directions.
 - The simulated audience is labeled as such and capped per scene. Human suggestions join the same voting pool.
 - The owner can stop generation; simply closing a viewer tab does not stop the shared producer.
 - Hedra generation consumes API-wallet credits. The app currently has no automatic spending cap, so the owner should stop the story when needed.
 - Video is not muted by the app. Browser autoplay rules may require a viewer to press Play to hear audio.
 
-For deployment, configure all four variables as encrypted runtime secrets and provide a persistent D1 database and R2 media bucket. The original site's `.openai/hosting.json` project reference is intentionally excluded from this public snapshot. Keep the hosted site private until its audience and operating controls are ready.
+For deployment, configure all four variables as encrypted runtime secrets and provide a persistent D1 database and R2 media bucket. The private Sites project's `.openai/hosting.json` is intentionally omitted from this public repository. Keep the hosted site private until its audience and operating controls are ready.

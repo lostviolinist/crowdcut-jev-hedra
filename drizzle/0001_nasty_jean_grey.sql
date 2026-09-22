@@ -1,0 +1,1 @@
+ALTER TABLE `live_scenes` ADD `cut_ms` integer DEFAULT 8000 NOT NULL;

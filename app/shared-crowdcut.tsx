@@ -4,10 +4,11 @@ import { FormEvent, useCallback, useEffect, useRef, useState } from "react";
 import Image from "next/image";
 import { ArrowUp, Clapperboard, Pause, Play, Radio, SkipForward } from "lucide-react";
 import { demoNames, makeLiveComment } from "@/lib/demo-comments";
-import { captureLastSceneFrameFromUrl } from "@/lib/scene-frame";
+import { captureSceneHandoffFromUrl } from "@/lib/scene-frame";
 import { OPENING_FRAME_PATH, STORY_TITLE } from "@/lib/story";
+import { locateSceneAtMs, sceneDurationMs, sceneStartMs, storyDurationMs } from "@/lib/story-timeline";
 
-type Scene = { number: number; action: string; created_at: number };
+type Scene = { number: number; action: string; cut_ms: number; created_at: number };
 type ChatComment = { id: number; name: string; body: string; action: string | null; created_at: number };
 type Idea = { id: string; action: string; votes: number };
 type Snapshot = {
@@ -16,7 +17,6 @@ type Snapshot = {
   isOwner: boolean; canComment: boolean;
 };
 
-const SCENE_SECONDS = 8;
 const MAX_SIMULATED_PER_ROUND = 25;
 const accents = ["#a970ff", "#39e6c5", "#ff7d9e", "#6fb8ff"];
 
@@ -78,12 +78,13 @@ export function SharedCrowdCut() {
     frameUploadingRef.current = true;
     const upload = async () => {
       try {
-        const blob = snapshot.sceneCount === 0
-          ? await fetch(OPENING_FRAME_PATH).then((response) => { if (!response.ok) throw new Error("Opening frame unavailable."); return response.blob(); })
-          : await captureLastSceneFrameFromUrl(mediaUrl(snapshot.sceneCount));
+        const handoff = snapshot.sceneCount === 0
+          ? { frame: await fetch(OPENING_FRAME_PATH).then((response) => { if (!response.ok) throw new Error("Opening frame unavailable."); return response.blob(); }), cutMs: 8000 }
+          : await captureSceneHandoffFromUrl(mediaUrl(snapshot.sceneCount));
         const form = new FormData();
         form.append("sceneNumber", String(snapshot.sceneCount));
-        form.append("frame", blob, "scene-frame.png");
+        form.append("cutMs", String(handoff.cutMs));
+        form.append("frame", handoff.frame, "scene-frame.png");
         const response = await fetch("/api/live/frame", { method: "POST", body: form });
         const result = await response.json() as { error?: string };
         if (!response.ok) throw new Error(result.error || "Could not prepare the next frame.");
@@ -121,16 +122,18 @@ export function SharedCrowdCut() {
   }, [snapshot?.isOwner, snapshot?.running, snapshot?.round, simulate]);
 
   useEffect(() => {
-    const count = snapshot?.scenes.length || 0;
+    const scenes = snapshot?.scenes || [];
+    const count = scenes.length;
     if (count > knownScenesRef.current && followLive) {
-      if (knownScenesRef.current === 0 || videoRef.current?.ended || playhead >= knownScenesRef.current * SCENE_SECONDS - 0.2) {
+      const previousEnd = sceneStartMs(scenes, knownScenesRef.current) / 1000;
+      if (knownScenesRef.current === 0 || videoRef.current?.ended || playhead >= previousEnd - 0.2) {
         seekRef.current = 0;
         setSelectedScene(count - 1);
-        setPlayhead((count - 1) * SCENE_SECONDS);
+        setPlayhead(sceneStartMs(scenes, count - 1) / 1000);
       }
     }
     knownScenesRef.current = count;
-  }, [snapshot?.scenes.length, followLive, playhead]);
+  }, [snapshot?.scenes, followLive, playhead]);
 
   useEffect(() => {
     const video = videoRef.current;
@@ -141,14 +144,41 @@ export function SharedCrowdCut() {
 
   const scenes = snapshot?.scenes || [];
   const activeScene = scenes[selectedScene];
-  const totalDuration = scenes.length * SCENE_SECONDS;
+  const activeCutMs = activeScene?.cut_ms;
+  const totalDuration = storyDurationMs(scenes) / 1000;
+  const activeStart = sceneStartMs(scenes, selectedScene) / 1000;
+  const sceneCount = scenes.length;
   const currentRoundVotes = snapshot?.ideas.reduce((sum, idea) => sum + idea.votes, 0) || 0;
+
+  // Follow the selected handoff on a displayed video frame, not only the coarse timeupdate event.
+  useEffect(() => {
+    const video = videoRef.current;
+    if (!video || activeCutMs == null || !playing || !video.requestVideoFrameCallback) return;
+    const cut = sceneDurationMs({ cut_ms: activeCutMs }) / 1000;
+    let stopped = false;
+    let callbackId = 0;
+    const check: VideoFrameRequestCallback = (_now, frame) => {
+      if (stopped) return;
+      if (frame.mediaTime >= cut - 0.025) {
+        video.pause();
+        setPlayhead(activeStart + cut);
+        if (selectedScene + 1 < sceneCount) {
+          seekRef.current = 0;
+          setSelectedScene(selectedScene + 1);
+        }
+        return;
+      }
+      callbackId = video.requestVideoFrameCallback(check);
+    };
+    callbackId = video.requestVideoFrameCallback(check);
+    return () => { stopped = true; video.cancelVideoFrameCallback(callbackId); };
+  }, [activeCutMs, activeStart, playing, selectedScene, sceneCount]);
 
   function seekTo(value: number) {
     if (!scenes.length) return;
     const time = Math.min(Math.max(0, value), Math.max(0, totalDuration - 0.05));
-    const index = Math.min(scenes.length - 1, Math.floor(time / SCENE_SECONDS));
-    const offset = time - index * SCENE_SECONDS;
+    const { index, offsetMs } = locateSceneAtMs(scenes, Math.round(time * 1000));
+    const offset = offsetMs / 1000;
     setFollowLive(false);
     setPlayhead(time);
     seekRef.current = offset;
@@ -162,7 +192,7 @@ export function SharedCrowdCut() {
     setPlaying(true);
     seekRef.current = 0;
     setSelectedScene(scenes.length - 1);
-    setPlayhead((scenes.length - 1) * SCENE_SECONDS);
+    setPlayhead(sceneStartMs(scenes, scenes.length - 1) / 1000);
     if (selectedScene === scenes.length - 1 && videoRef.current) videoRef.current.currentTime = 0;
   }
 
@@ -209,7 +239,7 @@ export function SharedCrowdCut() {
       <section className="min-w-0 p-4 sm:p-6"><div className="mx-auto max-w-[1120px]">
         <div className="mb-4"><h1 className="text-2xl font-semibold tracking-tight sm:text-3xl">{STORY_TITLE}</h1><p className="mt-2 text-sm text-white/55">The audience chooses Sophie&apos;s next move. Watch live or catch up from the beginning.</p></div>
         <div className="relative aspect-video overflow-hidden rounded-lg border border-white/10 bg-black shadow-2xl">
-          {activeScene ? <video ref={videoRef} src={mediaUrl(activeScene.number)} playsInline autoPlay className="absolute inset-0 size-full object-cover" onLoadedMetadata={(event) => { if (seekRef.current !== null) { event.currentTarget.currentTime = seekRef.current; seekRef.current = null; } if (playing) void event.currentTarget.play().catch(() => setPlaying(false)); }} onTimeUpdate={(event) => setPlayhead(selectedScene * SCENE_SECONDS + event.currentTarget.currentTime)} onEnded={() => { if (selectedScene + 1 < scenes.length && playing) { seekRef.current = 0; setSelectedScene(selectedScene + 1); } else if (followLive) setPlayhead(totalDuration); }} /> : <Image src={OPENING_FRAME_PATH} alt="Sophie opens the door of a moving castle." fill priority className="object-cover" sizes="(max-width: 1024px) 100vw, 70vw" />}
+          {activeScene ? <video ref={videoRef} src={mediaUrl(activeScene.number)} playsInline autoPlay className="absolute inset-0 size-full object-cover" onLoadedMetadata={(event) => { if (seekRef.current !== null) { event.currentTarget.currentTime = seekRef.current; seekRef.current = null; } if (playing) void event.currentTarget.play().catch(() => setPlaying(false)); }} onTimeUpdate={(event) => { const cut = sceneDurationMs(activeScene) / 1000; const position = Math.min(event.currentTarget.currentTime, cut); setPlayhead(sceneStartMs(scenes, selectedScene) / 1000 + position); if (playing && position >= cut - 0.025 && selectedScene + 1 < scenes.length) { seekRef.current = 0; setSelectedScene(selectedScene + 1); } }} onEnded={() => { if (selectedScene + 1 < scenes.length && playing) { seekRef.current = 0; setSelectedScene(selectedScene + 1); } else if (followLive) setPlayhead(totalDuration); }} /> : <Image src={OPENING_FRAME_PATH} alt="Sophie opens the door of a moving castle." fill priority className="object-cover" sizes="(max-width: 1024px) 100vw, 70vw" />}
           <span className="absolute left-4 top-4 rounded bg-[#e91916] px-2 py-1 text-[11px] font-bold tracking-wider">{snapshot?.running ? "LIVE STORY" : "STORY PAUSED"}</span>
           {!activeScene && <div className="absolute bottom-5 left-5 rounded bg-black/65 px-3 py-2 text-sm">{snapshot?.running ? "The first scene is taking shape…" : "Waiting for the story to begin"}</div>}
         </div>

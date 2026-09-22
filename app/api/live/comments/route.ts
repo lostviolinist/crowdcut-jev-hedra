@@ -1,5 +1,4 @@
 import { classifyAudienceComment } from "@/lib/jev";
-import { STORY_PREMISE } from "@/lib/story";
 import { currentUser, getLiveDb, getStory, isOwner, serverError } from "@/lib/live-state";
 
 export const runtime = "edge";
@@ -37,7 +36,7 @@ export async function POST(request: Request) {
     try {
       const recent = await db.prepare("SELECT action FROM live_scenes ORDER BY number DESC LIMIT 2").all<{ action: string }>();
       const context = recent.results.map((scene) => scene.action).reverse().join("; ");
-      const result = await classifyAudienceComment(body, ideas.results, `${STORY_PREMISE} Recent directions: ${context}`);
+      const result = await classifyAudienceComment(body, ideas.results, `Recent directions: ${context}`);
       if (result.mode !== "jev") throw new Error("Jev is unavailable.");
       if (!result.safeForLiveStory) {
         await db.prepare("UPDATE live_comments SET state = 'blocked', body = '[removed by moderation]', action = NULL, cluster_id = NULL WHERE id = ?")

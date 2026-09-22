@@ -1,4 +1,4 @@
-import { STORY_PREMISE, STORY_VISUAL_STYLE } from "./story";
+import { STORY_PREMISE, STORY_SEARCH_GOAL, STORY_VISUAL_STYLE } from "./story";
 
 const HEDRA_BASE_URL = "https://api.hedra.com/v3";
 export type StoryRenderPreset = "fastest" | "fast" | "quality";
@@ -20,6 +20,8 @@ export type HedraStoryInput = {
   duration_ms: 5000 | 8000;
   start_image?: { source: "url"; url: string };
 };
+
+export type StoryContinuity = { sceneNumber: number; previousActions: string[] };
 
 function getApiKey() {
   const apiKey = process.env.HEDRA_API_KEY?.trim();
@@ -55,10 +57,16 @@ export function sanitizeStoryAction(value: unknown) {
   return action;
 }
 
-export function buildStoryInput(action: string, preset: StoryRenderPreset, startImageUrl?: string, sceneContext = ""): HedraStoryInput {
+export function buildStoryInput(action: string, preset: StoryRenderPreset, startImageUrl?: string, sceneContext: string | StoryContinuity = ""): HedraStoryInput {
   const settings = RENDER_PRESETS[preset];
+  const memory = typeof sceneContext === "string"
+    ? sceneContext
+    : sceneContext.previousActions.length
+      ? `This is scene ${sceneContext.sceneNumber}. Earlier audience choices, in order: ${sceneContext.previousActions.map((choice, index) => `${Math.max(1, sceneContext.sceneNumber - sceneContext.previousActions.length + index)}. ${choice}`).join("; ")}. These are intentions, not a description of every generated image.`
+      : `This is scene ${sceneContext.sceneNumber}, immediately after the opening frame.`;
+  const premise = typeof sceneContext === "string" || sceneContext.sceneNumber <= 1 ? STORY_PREMISE : STORY_SEARCH_GOAL;
   return {
-    prompt: `Continue this story from the supplied start frame. ${STORY_PREMISE} ${sceneContext ? `Story so far: ${sceneContext}. ` : ""}The audience chose this next action: ${action}. Show Sophie clearly doing it and reveal one immediate magical consequence that moves her search forward. Do not repeat earlier beats. ${STORY_VISUAL_STYLE} One continuous animated shot. Keep every frame purely 2D. No photorealism, 3D rendering, captions, logos, or on-screen text.`,
+    prompt: `Create one continuous ${settings.duration_ms / 1000}-second animated shot, starting exactly from the supplied image. The image is the visual truth: keep Sophie's pose, location, surroundings, props, lighting, and camera direction continuous, even if a prior audience choice suggests something different. ${premise} ${memory ? `${memory} ` : ""}This is one unfolding search, not a fresh start. The audience's new direction is: ${action}. In this shot she visibly attempts that specific action. Let it cause one small, concrete magical response connected to finding her friend. Show her noticing the response and end on a clear, steady frame that can start the next shot. Do not replay an earlier action, teleport, change rooms without showing the movement, introduce an unrelated character, cut to a new angle, fade to black, or finish on a transition. ${STORY_VISUAL_STYLE} Keep every frame purely 2D. No photorealism, 3D rendering, captions, logos, or on-screen text.`,
     ...(startImageUrl ? {} : { aspect_ratio: "16:9" as const }),
     resolution: settings.resolution,
     duration_ms: settings.duration_ms,
@@ -85,7 +93,7 @@ export async function estimateStoryGeneration(action: string, preset: StoryRende
   });
 }
 
-export async function submitStoryGeneration(action: string, openingFrame: File, preset: StoryRenderPreset, sceneContext = "") {
+export async function submitStoryGeneration(action: string, openingFrame: File, preset: StoryRenderPreset, sceneContext: string | StoryContinuity = "") {
   const startImageUrl = await uploadOpeningFrame(openingFrame);
   return hedraRequest(`/models/${RENDER_PRESETS[preset].model}`, {
     method: "POST",

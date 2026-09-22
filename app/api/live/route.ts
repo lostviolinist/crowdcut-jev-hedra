@@ -2,7 +2,7 @@ import { getLiveDb, getStory, currentUser, isOwner, serverError } from "@/lib/li
 
 export const runtime = "edge";
 
-type Scene = { number: number; action: string; created_at: number };
+type Scene = { number: number; action: string; cut_ms: number; created_at: number };
 type ChatComment = { id: number; name: string; body: string; action: string | null; created_at: number };
 type Idea = { id: string; action: string; votes: number };
 
@@ -11,7 +11,7 @@ export async function GET(request: Request) {
     const db = getLiveDb();
     const story = await getStory(db);
     const [scenesResult, commentsResult, ideasResult] = await Promise.all([
-      db.prepare("SELECT number, action, created_at FROM live_scenes ORDER BY number ASC").all<Scene>(),
+      db.prepare("SELECT number, action, cut_ms, created_at FROM live_scenes ORDER BY number ASC").all<Scene>(),
       db.prepare("SELECT id, name, body, action, created_at FROM live_comments WHERE state = 'usable' ORDER BY id DESC LIMIT 80").all<ChatComment>(),
       db.prepare("SELECT cluster_id AS id, MIN(action) AS action, COUNT(*) AS votes FROM live_comments WHERE round = ? AND state = 'usable' GROUP BY cluster_id ORDER BY votes DESC, id ASC LIMIT 4").bind(story.round).all<Idea>(),
     ]);

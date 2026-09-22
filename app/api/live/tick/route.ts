@@ -63,9 +63,11 @@ export async function POST(request: Request) {
               const frame = await getLiveBucket().get(story.frame_key);
               if (!frame) throw new Error("The next scene frame is missing.");
               const file = new File([await frame.arrayBuffer()], "scene-start.png", { type: "image/png" });
-              const history = await db.prepare("SELECT action FROM live_scenes ORDER BY number DESC LIMIT 6").all<{ action: string }>();
-              const context = history.results.reverse().map((scene) => scene.action).join("; ");
-              const submitted = await submitStoryGeneration(winner.action, file, "fastest", context) as Job;
+              const history = await db.prepare("SELECT action FROM live_scenes ORDER BY number DESC LIMIT 12").all<{ action: string }>();
+              const submitted = await submitStoryGeneration(winner.action, file, "fastest", {
+                sceneNumber: story.scene_count + 1,
+                previousActions: history.results.reverse().map((scene) => scene.action),
+              }) as Job;
               if (!submitted.job_id) throw new Error("Hedra returned no job ID.");
               await db.prepare("UPDATE live_story SET phase = 'rendering', job_id = ?, next_poll_at = 0 WHERE id = 1 AND phase = 'submitting' AND pending_action = ?")
                 .bind(submitted.job_id, winner.action).run();

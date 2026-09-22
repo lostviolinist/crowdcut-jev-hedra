@@ -6,7 +6,7 @@ import {
   normalizeAudienceAction,
   type ExistingAudienceIdea,
 } from "./story-ideas";
-import { STORY_PREMISE } from "./story";
+import { STORY_SEARCH_GOAL } from "./story";
 
 export type JevDecision = {
   usable: boolean;
@@ -76,7 +76,7 @@ export async function classifyAudienceComment(
 
   const response = await client.systemOne({
     state: {
-      scene: `${STORY_PREMISE} ${sceneContext}`,
+      scene: `${STORY_SEARCH_GOAL} ${sceneContext}`,
       audience_comment: comment,
       current_audience_ideas: ideas,
     },

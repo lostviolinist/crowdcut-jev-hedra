@@ -19,6 +19,7 @@ export const liveScenes = sqliteTable("live_scenes", {
   action: text("action").notNull(),
   videoKey: text("video_key").notNull(),
   jobId: text("job_id").notNull(),
+  cutMs: integer("cut_ms").notNull().default(8000),
   createdAt: integer("created_at").notNull(),
 });
 

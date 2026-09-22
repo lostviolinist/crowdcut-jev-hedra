@@ -2,6 +2,8 @@ export const STORY_TITLE = "The Castle of Shadows";
 export const OPENING_FRAME_PATH = "/opening-frame-sophie.png";
 export const STORY_PREMISE =
   "Sophie has searched for her long-lost friend for years. His shadows have led her into a magical world, where a walking castle now looms before her. She opens its ornate door and glimpses his silhouette deeper inside. The audience decides what she does next.";
+export const STORY_SEARCH_GOAL =
+  "Sophie is searching for her long-lost friend in a magical world shaped by a walking castle. His shadows have been her trail. Her goal is to find him and understand why his shadow led her here.";
 export const STORY_VISUAL_STYLE =
   "2D hand-drawn anime fantasy with hand-painted watercolor backgrounds, warm magical light, expressive linework, and gentle cinematic movement. Sophie is the same young woman in every shot: chestnut-brown hair in a loose high bun with wispy strands, dark green travel cloak over a cream blouse, rust-red scarf, and weathered brown shoulder satchel. Preserve her face, age, hair color, outfit, body proportions, and the moving castle's ornate architecture; never redesign or replace her.";
 
