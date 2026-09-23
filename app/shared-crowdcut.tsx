@@ -39,10 +39,12 @@ export function SharedCrowdCut() {
   const [selectedScene, setSelectedScene] = useState(0);
   const [playhead, setPlayhead] = useState(0);
   const [playing, setPlaying] = useState(true);
+  const [autoplayBlocked, setAutoplayBlocked] = useState(false);
   const [followLive, setFollowLive] = useState(true);
   const [frameRetry, setFrameRetry] = useState(0);
   const [bridgeFrame, setBridgeFrame] = useState<string | null>(null);
   const [videoReady, setVideoReady] = useState(false);
+  const [waitingForNextScene, setWaitingForNextScene] = useState(false);
   const videoRef = useRef<HTMLVideoElement | null>(null);
   const bridgeFrameCapturedRef = useRef(false);
   const chatRef = useRef<HTMLDivElement | null>(null);
@@ -71,9 +73,29 @@ export function SharedCrowdCut() {
 
   const switchScene = useCallback((index: number) => {
     captureBridgeFrame();
+    setWaitingForNextScene(false);
     setVideoReady(false);
+    setAutoplayBlocked(false);
     setSelectedScene(index);
   }, [captureBridgeFrame]);
+
+  const tryPlay = useCallback((video: HTMLVideoElement) => {
+    const source = video.currentSrc;
+    void video.play().then(() => {
+      if (videoRef.current === video && video.currentSrc === source) setAutoplayBlocked(false);
+    }).catch((caught: unknown) => {
+      // A source change can cancel an earlier play request while the next
+      // scene loads. onCanPlay will retry that scene.
+      if (videoRef.current !== video || video.currentSrc !== source) return;
+      const name = caught instanceof Error ? caught.name : "";
+      if (name === "AbortError") return;
+      if (name === "NotAllowedError") {
+        setAutoplayBlocked(true);
+        return;
+      }
+      setError("This scene could not play. Try playing it again.");
+    });
+  }, []);
 
   const load = useCallback(async () => {
     try {
@@ -166,6 +188,7 @@ export function SharedCrowdCut() {
     if (count < knownScenesRef.current) {
       seekRef.current = 0;
       setSelectedScene(0);
+      setWaitingForNextScene(false);
       setBridgeFrame(null);
       setVideoReady(false);
       bridgeFrameCapturedRef.current = false;
@@ -174,21 +197,25 @@ export function SharedCrowdCut() {
     }
     if (count > knownScenesRef.current && followLive) {
       const previousEnd = sceneStartMs(scenes, knownScenesRef.current) / 1000;
-      if (knownScenesRef.current === 0 || videoRef.current?.ended || playhead >= previousEnd - 0.2) {
+      if (knownScenesRef.current === 0 || autoplayBlocked || videoRef.current?.ended || playhead >= previousEnd - 0.2) {
         seekRef.current = 0;
         switchScene(count - 1);
         setPlayhead(sceneStartMs(scenes, count - 1) / 1000);
       }
     }
     knownScenesRef.current = count;
-  }, [snapshot?.scenes, followLive, playhead, switchScene]);
+  }, [snapshot?.scenes, followLive, playhead, autoplayBlocked, switchScene]);
 
   useEffect(() => {
     const video = videoRef.current;
     if (!video) return;
-    if (playing) void video.play().catch(() => setPlaying(false));
-    else video.pause();
-  }, [playing, selectedScene]);
+    if (!playing) {
+      video.pause();
+      setAutoplayBlocked(false);
+    } else if (video.readyState >= HTMLMediaElement.HAVE_FUTURE_DATA) {
+      tryPlay(video);
+    }
+  }, [playing, selectedScene, tryPlay]);
 
   const scenes = snapshot?.scenes || [];
   const activeScene = scenes[selectedScene];
@@ -199,6 +226,15 @@ export function SharedCrowdCut() {
   const currentRoundVotes = snapshot?.ideas.reduce((sum, idea) => sum + idea.votes, 0) || 0;
   const liveStatus = !snapshot?.running ? "Story paused" : snapshot.producerActive ? "Live story" : "Waiting for host";
   const canSendComment = Boolean(snapshot?.running && snapshot.producerActive);
+
+  // A clip can reach its cut before the next Hedra job finishes. Resume the
+  // continuous movie when that scene arrives, even after a viewer has sought
+  // away from the live edge.
+  useEffect(() => {
+    if (!playing || !waitingForNextScene || selectedScene + 1 >= sceneCount) return;
+    seekRef.current = 0;
+    switchScene(selectedScene + 1);
+  }, [playing, waitingForNextScene, selectedScene, sceneCount, switchScene]);
 
   // Follow the selected handoff on a displayed video frame, not only the coarse timeupdate event.
   useEffect(() => {
@@ -216,7 +252,7 @@ export function SharedCrowdCut() {
         if (selectedScene + 1 < sceneCount) {
           seekRef.current = 0;
           switchScene(selectedScene + 1);
-        }
+        } else setWaitingForNextScene(true);
         return;
       }
       callbackId = video.requestVideoFrameCallback(check);
@@ -231,6 +267,7 @@ export function SharedCrowdCut() {
     const { index, offsetMs } = locateSceneAtMs(scenes, Math.round(time * 1000));
     const offset = offsetMs / 1000;
     setFollowLive(false);
+    setWaitingForNextScene(false);
     setPlayhead(time);
     seekRef.current = offset;
     if (index === selectedScene && videoRef.current?.readyState) videoRef.current.currentTime = offset;
@@ -240,11 +277,22 @@ export function SharedCrowdCut() {
   function goLive() {
     if (!scenes.length) return;
     setFollowLive(true);
+    setWaitingForNextScene(false);
     setPlaying(true);
     seekRef.current = 0;
     if (selectedScene !== scenes.length - 1) switchScene(scenes.length - 1);
     setPlayhead(sceneStartMs(scenes, scenes.length - 1) / 1000);
     if (selectedScene === scenes.length - 1 && videoRef.current) videoRef.current.currentTime = 0;
+  }
+
+  function togglePlayback() {
+    if (playing && !autoplayBlocked) {
+      videoRef.current?.pause();
+      setPlaying(false);
+      return;
+    }
+    setPlaying(true);
+    if (videoRef.current) tryPlay(videoRef.current);
   }
 
   async function control(action: "start" | "stop") {
@@ -267,6 +315,7 @@ export function SharedCrowdCut() {
       const result = await response.json() as { error?: string; mediaCleanupIncomplete?: boolean };
       if (!response.ok) throw new Error(result.error || "Could not reset the story.");
       setSelectedScene(0);
+      setWaitingForNextScene(false);
       setBridgeFrame(null);
       setVideoReady(false);
       bridgeFrameCapturedRef.current = false;
@@ -317,18 +366,17 @@ export function SharedCrowdCut() {
         <div className="relative aspect-video overflow-hidden rounded-lg border border-white/10 bg-black shadow-2xl">
           {(!activeScene || (!videoReady && !bridgeFrame)) && <Image src={OPENING_FRAME_PATH} alt="Sophie opens the door of a moving castle." fill priority className="object-cover" sizes="(max-width: 1024px) 100vw, 70vw" />}
           {activeScene && <video
-            key={activeScene.number}
             ref={videoRef}
             src={mediaUrl(activeScene.number)}
             playsInline
-            autoPlay
+            preload="auto"
             className={`absolute inset-0 size-full object-cover ${videoReady ? "opacity-100" : "opacity-0"}`}
             onLoadedMetadata={(event) => {
               if (seekRef.current !== null) { event.currentTarget.currentTime = seekRef.current; seekRef.current = null; }
-              if (playing) void event.currentTarget.play().catch(() => setPlaying(false));
             }}
-            onLoadedData={() => { if (!playing) { setVideoReady(true); setBridgeFrame(null); } }}
-            onPlaying={() => { setVideoReady(true); setBridgeFrame(null); bridgeFrameCapturedRef.current = false; }}
+            onLoadedData={() => { setVideoReady(true); setBridgeFrame(null); }}
+            onCanPlay={(event) => { if (playing) tryPlay(event.currentTarget); }}
+            onPlaying={() => { setAutoplayBlocked(false); setVideoReady(true); setBridgeFrame(null); bridgeFrameCapturedRef.current = false; }}
             onTimeUpdate={(event) => {
               const cut = sceneDurationMs(activeScene) / 1000;
               const position = Math.min(event.currentTarget.currentTime, cut);
@@ -337,21 +385,26 @@ export function SharedCrowdCut() {
                 event.currentTarget.pause();
                 captureBridgeFrame();
                 if (selectedScene + 1 < scenes.length) { seekRef.current = 0; switchScene(selectedScene + 1); }
+                else setWaitingForNextScene(true);
               }
             }}
             onEnded={() => {
               captureBridgeFrame();
               if (selectedScene + 1 < scenes.length && playing) { seekRef.current = 0; switchScene(selectedScene + 1); }
-              else if (followLive) setPlayhead(totalDuration);
+              else {
+                if (playing) setWaitingForNextScene(true);
+                if (followLive) setPlayhead(totalDuration);
+              }
             }}
           />}
           {bridgeFrame && <div aria-hidden="true" className="absolute inset-0 bg-cover bg-center" style={{ backgroundImage: `url(${bridgeFrame})` }} />}
+          {activeScene && autoplayBlocked && <button type="button" onClick={togglePlayback} className="absolute inset-0 z-10 flex items-center justify-center bg-black/45 text-lg font-semibold text-white"><span className="flex items-center gap-3 rounded-lg bg-[#9147ff] px-5 py-3 shadow-xl"><Play size={22} fill="currentColor" /> Play with sound</span></button>}
           <span className="absolute left-4 top-4 rounded bg-[#e91916] px-2 py-1 text-[11px] font-bold tracking-wider">{liveStatus.toUpperCase()}</span>
           {!activeScene && <div className="absolute bottom-5 left-5 rounded bg-black/65 px-3 py-2 text-sm">{!snapshot?.running ? "Waiting for the story to begin" : snapshot.producerActive ? "The first scene is taking shape…" : "Waiting for the host to reconnect…"}</div>}
         </div>
         <div className="mt-3 rounded border border-white/10 bg-[#18181b] p-3">
           <div className="flex items-center gap-3">
-            <button type="button" onClick={() => setPlaying((value) => !value)} disabled={!activeScene} aria-label={playing ? "Pause your playback" : "Play with sound"} className="rounded bg-white/10 p-2 disabled:opacity-40">{playing ? <Pause size={17} /> : <Play size={17} />}</button>
+            <button type="button" onClick={togglePlayback} disabled={!activeScene} aria-label={playing && !autoplayBlocked ? "Pause your playback" : "Play with sound"} className="rounded bg-white/10 p-2 disabled:opacity-40">{playing && !autoplayBlocked ? <Pause size={17} /> : <Play size={17} />}</button>
             <span className="shrink-0 text-xs tabular-nums text-white/65">{formatTime(playhead)} / {formatTime(totalDuration)}</span>
             <input type="range" aria-label="Story timeline" min={0} max={Math.max(totalDuration, 0.1)} step={0.1} value={Math.min(playhead, Math.max(totalDuration, 0.1))} onChange={(event) => seekTo(Number(event.target.value))} disabled={!activeScene} className="min-w-0 flex-1 accent-[#9147ff]" />
             <button type="button" onClick={goLive} disabled={!activeScene} className="flex shrink-0 items-center gap-1 rounded bg-[#9147ff]/20 px-2 py-1.5 text-xs font-semibold text-[#bf94ff] disabled:opacity-40"><SkipForward size={14} /> Go live</button>
