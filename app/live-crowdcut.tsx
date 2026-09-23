@@ -3,7 +3,7 @@
 import { FormEvent, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import Image from "next/image";
 import { ArrowUp, Clapperboard, LoaderCircle, Pause, Play, Sparkles } from "lucide-react";
-import { demoNames, makeLiveComment } from "@/lib/demo-comments";
+import { makeLiveComment, makeLiveName } from "@/lib/demo-comments";
 import { captureLastSceneFrame } from "@/lib/scene-frame";
 import { OPENING_FRAME_PATH, STORY_TITLE } from "@/lib/story";
 
@@ -99,7 +99,7 @@ export function LiveCrowdCut() {
         }
         const next = await response.json() as Status;
         setStatus(next);
-        if (!next.jev) { setError("Jev is unavailable. The story will wait instead of using simulated classifications."); setRunning(false); }
+        if (!next.jev) { setError("Jev is unavailable. The story will wait for classification."); setRunning(false); }
         else if (!next.hedra) { setError("Hedra is unavailable. The story will wait until its connection is restored."); setRunning(false); }
       }).catch(() => { setError("The live connections could not be checked."); setRunning(false); });
   }, []);
@@ -162,7 +162,7 @@ export function LiveCrowdCut() {
       if (inFlightRef.current < MAX_CLASSIFICATIONS_IN_FLIGHT) {
         const index = commentIndexRef.current++;
         simulatedThisRoundRef.current++;
-        void classify(makeLiveComment(index, roundIndex), demoNames[index % demoNames.length]);
+        void classify(makeLiveComment(index), makeLiveName(index, roundIndex));
       }
       // Most messages take a beat to type; an occasional longer pause keeps chat human-paced.
       const typingDelay = 400 + Math.random() * 750 + (Math.random() < 0.12 ? 500 + Math.random() * 550 : 0);
@@ -337,7 +337,7 @@ export function LiveCrowdCut() {
             : <div className="rounded-lg border border-dashed border-white/15 bg-[#18181b] p-6 text-center text-sm text-white/45">The next audience directions are taking shape.</div>}
         </div></section>
         <aside className="flex min-h-[520px] flex-col border-t border-white/10 bg-[#18181b] lg:h-[calc(100vh-64px)] lg:border-l lg:border-t-0">
-          <div className="flex items-center justify-between border-b border-white/10 px-4 py-3"><div><h2 className="text-sm font-semibold">Live chat</h2><p className="mt-0.5 text-xs text-white/40">Simulated chat + your suggestions · Jev reads both</p></div><span className="flex items-center gap-1.5 text-xs text-[#39e6c5]"><Sparkles size={13} />{Math.min(roundProcessed, COMMENTS_PER_SCENE)}/{COMMENTS_PER_SCENE}</span></div>
+          <div className="flex items-center justify-between border-b border-white/10 px-4 py-3"><div><h2 className="text-sm font-semibold">Live chat</h2><p className="mt-0.5 text-xs text-white/40">Chat suggestions · Jev reads each one</p></div><span className="flex items-center gap-1.5 text-xs text-[#39e6c5]"><Sparkles size={13} />{Math.min(roundProcessed, COMMENTS_PER_SCENE)}/{COMMENTS_PER_SCENE}</span></div>
           <div ref={chatListRef} className="flex-1 space-y-3 overflow-y-auto px-4 py-4">{comments.length ? comments.slice().reverse().map((comment) => <div key={comment.id} className={"text-sm leading-snug " + (comment.name === "you" ? "rounded border border-[#39e6c5]/30 bg-[#39e6c5]/10 p-2" : "")}><span className={"mr-2 font-semibold " + (comment.name === "you" ? "text-[#39e6c5]" : "text-[#bf94ff]")}>{comment.name}</span><span className="text-white/75">{comment.body}</span><p className={"mt-1 text-[11px] " + (comment.state === "error" ? "text-[#ff8ca5]" : "text-white/35")}>{comment.state === "pending" ? "Reading…" : comment.state === "error" ? comment.action : comment.action ? "Jev → " + comment.action : "Jev → off-topic"}</p></div>) : <p className="pt-8 text-center text-sm text-white/35">The audience is arriving…</p>}</div>
           <form onSubmit={submitComment} className="flex gap-2 border-t border-white/10 bg-[#18181b] p-3"><input value={draft} onChange={(event) => setDraft(event.target.value)} maxLength={500} placeholder="Suggest what Sophie does next…" className="min-w-0 flex-1 rounded border border-white/10 bg-[#0e0e10] px-3 py-2 text-sm outline-none focus:border-[#9147ff]" /><button type="submit" disabled={!draft.trim()} className="rounded bg-[#9147ff] px-3 disabled:opacity-40" aria-label="Send suggestion"><ArrowUp size={17} /></button></form>
         </aside>

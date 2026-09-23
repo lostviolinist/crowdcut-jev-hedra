@@ -21,7 +21,7 @@ export type StoryRow = {
 
 export function isOwner(request: Request) {
   const user = currentUser(request);
-  return Boolean(user && ((OWNER_USER_ID && user.id === OWNER_USER_ID) || (OWNER_EMAIL && user.email.toLowerCase() === OWNER_EMAIL)));
+  return Boolean(user && OWNER_USER_ID && OWNER_EMAIL && user.id === OWNER_USER_ID && user.email.toLowerCase() === OWNER_EMAIL);
 }
 
 export function currentUser(request: Request) {

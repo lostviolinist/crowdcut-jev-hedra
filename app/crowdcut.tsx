@@ -3,7 +3,7 @@
 import { FormEvent, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import Image from "next/image";
 import { ArrowUp, Clapperboard, LoaderCircle, Pause, Play, RotateCcw, Sparkles } from "lucide-react";
-import { demoComments, demoNames } from "@/lib/demo-comments";
+import { demoComments, makeLiveName } from "@/lib/demo-comments";
 import { OPENING_FRAME_PATH, STORY_TITLE } from "@/lib/story";
 import type { StoryRenderPreset } from "@/lib/hedra";
 
@@ -100,7 +100,7 @@ export function CrowdCut() {
       if (inFlight.current >= speed || cursor.current >= demoComments.length) return;
       const index = cursor.current++;
       setSent(cursor.current);
-      void classify(demoComments[index], demoNames[index % demoNames.length], true);
+      void classify(demoComments[index], makeLiveName(index, 0), true);
       if (cursor.current === demoComments.length) setStream("complete");
     }, 1000 / speed);
     return () => window.clearInterval(timer);

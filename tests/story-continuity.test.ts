@@ -30,6 +30,7 @@ test("later prompts carry ordered audience memory without resetting to the openi
   assert.match(prompt, /1\. Follow his shadow; 2\. Look under the stairs; 3\. Examine the key/);
   assert.match(prompt, /The audience's new direction is: Ask the castle for help/);
   assert.match(prompt, /image is the visual truth/);
+  assert.match(prompt, /movement, discovery, and visual consequences/);
   assert.match(prompt, /end on a clear, steady frame/);
   assert.doesNotMatch(prompt, /She opens its ornate door/);
 });

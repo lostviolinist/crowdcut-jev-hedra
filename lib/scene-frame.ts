@@ -40,9 +40,9 @@ export async function captureSceneHandoffFromUrl(url: string): Promise<SceneHand
     small.width = 64;
     small.height = 36;
     const smallContext = small.getContext("2d");
-    let bestTime = Math.max(0, video.duration - 0.35);
+    let bestTime = Math.max(0, video.duration - 0.5);
     let bestScore = -1;
-    for (const secondsBeforeEnd of [0.35, 0.8, 1.3]) {
+    for (const secondsBeforeEnd of [0.5, 0.8, 1.3]) {
       const time = Math.max(0, video.duration - secondsBeforeEnd);
       const seeked = waitForVideo(video, "seeked");
       video.currentTime = time;

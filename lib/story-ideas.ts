@@ -3,41 +3,65 @@ export type ExistingAudienceIdea = {
   action: string;
 };
 
-const ACTION_ALIASES: Array<{ pattern: RegExp; action: string }> = [
-  { pattern: /\b(follow|chase|trail|tail|track|go after)\b.*\b(shadow|silhouette|outline|shade)\b/i, action: "Follow his shadow" },
-  { pattern: /\b(step|walk|go|head|run|sneak)\b.*\b(inside|into|through)\b|\b(enter|explore)\b.*\b(castle|hall|room|door)\b/i, action: "Enter the castle" },
-  { pattern: /\b(ask|talk|speak|tell)\b.*\b(castle|door|walls|house|building)\b/i, action: "Ask the castle for help" },
-  { pattern: /\b(call|shout|yell|whisper|say|speak|ask|talk)\b.*\b(friend|him|name|silhouette)\b/i, action: "Call out to her friend" },
-  { pattern: /\b(inspect|check|read|study|examine|look for|search)\b.*\b(mark|clue|rune|symbol|writing|footprint|keyhole|trail|crest)\b/i, action: "Search the doorway for clues" },
-];
-
 const OFF_TOPIC = /\b(follow my account|subscribe|giveaway|discount code|my wifi|what time is it|brb|what brand|who made this)\b/i;
 const ACTION_VERBS = /\b(open|inspect|check|look|leave|run|throw|call|ask|touch|hide|break|move|take|send|wait|record|follow|chase|trail|track|enter|explore|read|pick|push|knock|speak|talk|whisper|shout|listen|sing|climb|step|walk|search|draw|light|offer|hold|sneak|tie|grab)\b/i;
 
-export function normalizeAudienceAction(comment: string, trustActionable = false): string | null {
-  const cleaned = comment
+// Jev chooses the cluster. Its SDK does not produce a free-text cluster title,
+// so turn a new suggestion into a short action without flattening novel ideas
+// into a small list of predefined story branches.
+export function formatAudienceActionLabel(value: string): string {
+  let action = value
     .replace(/[\u0000-\u001f\u007f]/g, " ")
     .replace(/https?:\/\/\S+/gi, " ")
-    .replace(/^\s*(?:sophie\s+should|she\s+should|i\s+(?:think|vote)\s+(?:she\s+should)?|please|make her|have her)\s+/i, "")
     .replace(/\s+/g, " ")
     .trim();
 
-  if (!cleaned || cleaned.length < 2 || OFF_TOPIC.test(cleaned)) return null;
+  // Remove stream-chat framing, speculation, and character/modal wording.
+  // Keep the concrete verb and object: "ask the door" is not automatically
+  // relabeled as the much broader "ask the castle for help".
+  const prefixes = [
+    /^(?:chat|hey chat|okay chat|ok chat|guys|everyone)[,!:\s-]+/i,
+    /^(?:what if (?:she|sophie) tries to|my vote is to|no wait)[,!?:\s-]+/i,
+    /^(?:hear me out|plot twist|next move|my vote|idea)[!?:,\s-]+/i,
+    /^(?:maybe|perhaps|please|honestly|wait|what if)[,!?:\s-]+/i,
+    /^(?:does anyone else want|i(?:'d| would)? (?:love|like|want) to see) (?:her|sophie) (?:to )?/i,
+    /^(?:i (?:think|vote|say|reckon)(?: that)? (?:she|sophie) (?:should|could|needs to|has to)?\s*)/i,
+    /^(?:why (?:doesn'?t|does not|not)|could|can|should|would) (?:she|sophie)\s+/i,
+    /^(?:she|sophie) (?:should|could|can|might|needs to|has to|ought to|would)\s+/i,
+    /^(?:make|have|let) (?:her|sophie)\s+/i,
+    /^(?:try to|let'?s)\s+/i,
+  ];
+  for (let pass = 0; pass < 3; pass++) {
+    let changed = false;
+    for (const prefix of prefixes) {
+      const next = action.replace(prefix, "").trim();
+      if (next !== action && next) {
+        action = next;
+        changed = true;
+      }
+    }
+    if (!changed) break;
+  }
 
-  const alias = ACTION_ALIASES.find(({ pattern }) => pattern.test(cleaned));
-  if (alias) return alias.action;
-  if (!trustActionable && !ACTION_VERBS.test(cleaned)) return null;
-
-  const concise = cleaned
+  action = action
+    .replace(/\s*(?:—|–)\s*(?:what do you think|she is so close|right now)\s*$/i, "")
+    .replace(/(?:\s*,?\s*(?:maybe|perhaps|please|right now|what do you think))+[!?.\s]*$/i, "")
     .replace(/^[^\p{L}\p{N}]+/u, "")
-    .replace(/[!?.,]+$/g, "")
-    .split(" ")
-    .slice(0, 12)
-    .join(" ")
-    .slice(0, 96);
+    .replace(/[!?.;,\s]+$/g, "");
 
-  if (!concise) return null;
-  return concise.charAt(0).toUpperCase() + concise.slice(1);
+  // Trim at word boundaries so labels stay scannable in the direction cards.
+  const words = action.split(/\s+/).filter(Boolean);
+  const concise = words.slice(0, 12).join(" ");
+  const bounded = concise.length <= 96 ? concise : concise.slice(0, 96).replace(/\s+\S*$/, "");
+  return bounded ? bounded.charAt(0).toUpperCase() + bounded.slice(1) : "";
+}
+
+export function normalizeAudienceAction(comment: string, trustActionable = false): string | null {
+  if (!comment.trim() || OFF_TOPIC.test(comment)) return null;
+  const action = formatAudienceActionLabel(comment);
+  if (!action || action.length < 2) return null;
+  if (!trustActionable && !ACTION_VERBS.test(action)) return null;
+  return action;
 }
 
 export function makeIdeaId(action: string) {

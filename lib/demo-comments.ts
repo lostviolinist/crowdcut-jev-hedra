@@ -36,10 +36,6 @@ export const demoComments: string[] = Array.from({ length: 10 }, (_, index) =>
   waves.map((wave) => wave[index]),
 ).flat();
 
-export const demoNames = [
-  "mila.mp4", "castlecat", "devon", "peach.wav", "kira.jpg", "mothlight", "rohan", "luna", "alix", "owlhouse", "tess", "marsh", "noah", "violet", "jules", "windmill", "cami", "inkdrop", "sam.g", "teacup",
-];
-
 // The continuing stream mixes distinct, story-appropriate ideas with ordinary chat.
 // Bare verb phrases let each voice form a grammatical, complete comment.
 const continuingActions = [
@@ -69,6 +65,105 @@ const continuingActions = [
   "let the shadow lead for once", "check whether the castle is protecting him", "find the source of the whispering",
   "ask the walls to repeat what they heard", "follow the staircase down instead", "look for a clue in the stained glass",
 ];
+
+// Strange ideas are still genuine directions, so Jev can decide whether the
+// crowd rallies around them rather than treating all weirdness as off-topic.
+const strangeDirections = [
+  "swap places with her own shadow", "fold the map into a bird and let it lead",
+  "borrow a minute from the castle's clock", "plant the mechanical bird in a flowerpot",
+  "open the door painted on the ceiling", "ask the mirror to show what it refuses to reflect",
+  "follow the staircase that appears only when her eyes are closed",
+  "trade her scarf for the castle's smallest secret", "send a paper moon through the keyhole",
+  "listen to the footprints instead of following them", "turn the hallway upside down with the brass dial",
+  "hide a message inside the next shadow", "knock on the floor and wait for the sky to answer",
+  "ask the clockwork bird to remember her friend's voice", "step into the reflection before it disappears",
+  "let the castle choose a door and then take the other one", "wind the rain backward to reveal the path",
+  "catch a falling star in the empty teacup", "untie the knot holding the moonlight in place",
+  "follow the song coming from an unopened book", "give the castle a name it has never heard",
+  "draw a doorway on the wall and try its handle", "ask her future shadow what it is running from",
+  "turn the castle's footsteps into a trail of lanterns", "open the suitcase full of yesterday's weather",
+  "make the silent door sing before opening it", "follow the upside-down footprints across the roof",
+  "read the letter written on the back of the wind", "challenge the mirror to show the real castle",
+  "follow the room that keeps arriving one second early",
+];
+
+// Live rounds move through different visual possibilities instead of asking
+// the castle the same question in slightly different words. These are seeds
+// for audience comments, not predefined Jev labels or guaranteed branches.
+const cinematicWaves = [
+  [
+    "step through the door as it changes color", "follow a paper bird into the rafters",
+    "turn the door dial to the moon symbol", "catch the glove drifting down the stairs",
+    "trace the glowing chalk trail", "climb the staircase hidden behind the fireplace",
+    "look for the room reflected in the lantern glass",
+  ],
+  [
+    "ride the staircase while it rearranges itself", "pull the brass lever beneath the floor",
+    "crawl under the wall before it slides shut", "jump across the moving floor tiles",
+    "mark her route with a ribbon", "follow the corridor that tilts toward the stars",
+    "open the trapdoor in the ceiling",
+  ],
+  [
+    "wind up the tiny mechanical bird", "put the singing key into the silent lock",
+    "follow the compass that points backward", "unfold the map hidden inside the teacup",
+    "hold the mirror up to the empty chair", "open the music box with the missing tune",
+    "catch the pocket watch before it falls through the floor",
+  ],
+  [
+    "climb onto the roof above the clouds", "cross the bridge that appears at sunset",
+    "follow the falling stars to the next tower", "sail a paper boat across the flooded hallway",
+    "jump onto the castle's passing balcony", "chase the lantern floating over the valley",
+    "follow the footprints that glow in moonlight",
+  ],
+  [
+    "pin the runaway shadow to the wall with her scarf", "follow the shadow that moves without a person",
+    "cast her own shadow across the locked doorway", "step into the place where two shadows meet",
+    "use the lantern to reveal the invisible staircase", "watch which way the shadows point at dawn",
+    "follow the silhouette that appears in the rain",
+  ],
+  [
+    "step inside the painting of their childhood street", "play the music box to unlock a memory",
+    "put the torn photograph back together", "follow the scarf drifting through the library",
+    "open the book that writes her name by itself", "walk through the room where yesterday is still happening",
+    "catch the paper cranes carrying old messages",
+  ],
+  [
+    "trade one memory for the hidden floor plan", "leave her shadow behind to open the door",
+    "give the clock one minute of her future", "offer the castle a secret instead of a question",
+    "break the spell on the mirror with the brass key", "choose which of the two identical doors is real",
+    "untie the red thread that holds the hallway in place",
+  ],
+  [
+    "follow the mechanical bird before its wings stop", "race the candle flame through the twisting hall",
+    "duck into the doorway that keeps running away", "grab the falling map before it burns",
+    "chase the echo up the spiral stairs", "follow the train of glowing moths",
+    "hide behind the moving tapestry until the footsteps pass",
+  ],
+  [
+    "open the door onto an underwater library", "step into the garden where snow falls upward",
+    "cross the midnight market inside the castle", "follow the river flowing through the ceiling",
+    "look into the window showing tomorrow", "walk across the bridge made of constellations",
+    "enter the room that is larger than the castle",
+  ],
+  [
+    "repair the cracked gear in the castle's heart", "follow the pulse beneath the floorboards",
+    "pull the star-shaped switch in the engine room", "catch the spark escaping from the furnace",
+    "climb inside the clockwork to reach the upper tower", "turn the wheel that changes the castle's path",
+    "use the broken compass to restart the machinery",
+  ],
+  [
+    "open the window where her friend appears only in reflection", "follow the footprints that belong to her future self",
+    "lift the curtain hiding a second castle", "step into the room where everyone has vanished",
+    "read the letter that changes whenever she blinks", "follow the shadow that has become a doorway",
+    "take the hand reaching out of the painted sky",
+  ],
+  [
+    "send a lantern signal from the highest tower", "open the sky door before the storm reaches it",
+    "carry the glowing key across the collapsing bridge", "free the paper birds trapped in the clock",
+    "follow the thread leading out of the castle", "turn the castle toward the sunrise",
+    "step through the final door together with her friend",
+  ],
+] as const;
 
 const suggestionVoices = [
   (action: string) => `maybe she should ${action}`,
@@ -109,17 +204,131 @@ const ambientChat = [
   "why do I feel like the walls are listening?", "I keep expecting the castle to answer back",
 ];
 
-export function makeLiveComment(index: number, sceneIndex: number): string {
-  if (index < demoComments.length) return demoComments[index];
-  const turn = index - demoComments.length;
-  // Roughly one in seven messages is casual chat. Within a visible 80-message
-  // window, action phrases do not repeat, and the voice changes independently.
-  if (turn % 7 === 0) {
-    const ambientNumber = Math.floor(turn / 7);
-    return ambientChat[(ambientNumber * 17 + sceneIndex * 5) % ambientChat.length];
+const irrelevantChat = [
+  "my cat just closed all my tabs", "wait is my laundry still in the washer", "what are we having for dinner",
+  "I think my keyboard is haunted", "does anyone know why my plant is leaning left", "my toast landed butter-side up today",
+  "I just found a sock in the fridge", "is it normal for a pigeon to follow the bus", "sorry I was looking for a soup recipe",
+  "I need to buy more dish soap", "can somebody remind me to water the basil", "my dog is watching this upside down",
+  "this is not the train timetable is it", "did I leave the oven on", "my phone thinks I am in the ocean",
+  "does anyone know where I put my glasses", "the moon looks like a potato tonight", "my neighbor is vacuuming at midnight",
+  "quick poll: pancakes or waffles", "I just sneezed and scared my houseplant", "why is my cereal making noise",
+  "I think I joined the wrong stream", "does anybody have a good pasta recipe", "the delivery app says my pizza is in a park",
+  "my goldfish is judging my life choices", "I forgot what I came into this room for", "who else has seventeen browser tabs open",
+  "apparently my fridge has a software update", "I accidentally called my teacher mom today", "I just spilled tea on the TV remote",
+  "my umbrella disappeared again", "is a hot dog a sandwich", "there's a tiny moth sitting on my headphones",
+  "someone please explain why my printer sings", "what day of the week is it", "I need a new charger",
+];
+
+function uniqueComments(comments: string[]): string[] {
+  const seen = new Set<string>();
+  return comments.filter((comment) => {
+    const key = comment.trim().replace(/\s+/g, " ").toLowerCase();
+    if (seen.has(key)) return false;
+    seen.add(key);
+    return true;
+  });
+}
+
+const directionDeck = uniqueComments([
+  ...demoComments.filter((_, index) => index % waves.length !== waves.length - 1),
+  ...continuingActions.flatMap((action) => suggestionVoices.map((voice) => voice(action))),
+]);
+const chatDeck = uniqueComments([
+  ...demoComments.filter((_, index) => index % waves.length === waves.length - 1),
+  ...ambientChat,
+]);
+
+function shuffled<T>(items: T[], seed: number): T[] {
+  const result = [...items];
+  let state = seed >>> 0;
+  for (let index = result.length - 1; index > 0; index--) {
+    state = (Math.imul(state, 1664525) + 1013904223) >>> 0;
+    const swap = state % (index + 1);
+    [result[index], result[swap]] = [result[swap], result[index]];
   }
-  const suggestionNumber = turn - Math.floor(turn / 7) - 1;
-  const action = continuingActions[(suggestionNumber * 37 + sceneIndex * 11) % continuingActions.length];
-  const voice = suggestionVoices[(suggestionNumber * 7 + Math.floor(suggestionNumber / continuingActions.length) * 5 + sceneIndex * 3) % suggestionVoices.length];
-  return voice(action);
+  return result;
+}
+
+const directions = shuffled(directionDeck, 0x643fe91b);
+const chat = shuffled(chatDeck, 0x517a92d1);
+
+const COMMENTS_PER_ROUND = 75;
+const secondaryDirections = uniqueComments([
+  ...continuingActions,
+  ...strangeDirections,
+  ...cinematicWaves.flat(),
+]);
+
+function liveRoundComments(round: number): string[] {
+  const wave = cinematicWaves[(round - 1) % cinematicWaves.length];
+  const core = wave.flatMap((action, actionIndex) =>
+    Array.from({ length: 4 }, (_, repetition) =>
+      suggestionVoices[(round * 7 + actionIndex * 5 + repetition * 11) % suggestionVoices.length](action),
+    ),
+  );
+  // Two ideas get an extra supporter, but most of the chat isn't seven
+  // near-identical refrains. Rotate the favored ideas between rounds.
+  for (const actionIndex of [round % wave.length, (round + 3) % wave.length]) {
+    core.push(suggestionVoices[(round * 7 + actionIndex * 5 + 4 * 11) % suggestionVoices.length](wave[actionIndex]));
+  }
+
+  const waveActions = new Set<string>(wave);
+  const otherActions = shuffled(
+    secondaryDirections.filter((action) => !waveActions.has(action)),
+    round * 0x72e31b59,
+  ).slice(0, 30);
+  const otherIdeas = otherActions.map((action, index) =>
+    suggestionVoices[(round * 3 + index * 7) % suggestionVoices.length](action),
+  );
+  const conversation = shuffled([
+    ...shuffled(chat, round * 0x4b8d2f15).slice(0, 7),
+    ...shuffled(irrelevantChat, round * 0x5cb90437).slice(0, 8),
+  ], round * 0x6d98b71f);
+
+  // Each short stretch has actionable suggestions, varied new directions,
+  // and a few reactions. Jev still sees the raw text and decides the groups.
+  const ranked = shuffled(core, round * 0x361e9c03);
+  const result: string[] = [];
+  for (let group = 0; group < 5; group++) {
+    result.push(...shuffled([
+      ...ranked.slice(group * 6, group * 6 + 6),
+      ...otherIdeas.slice(group * 6, group * 6 + 6),
+      ...conversation.slice(group * 3, group * 3 + 3),
+    ], round * 53 + group * 17));
+  }
+  return result;
+}
+
+let cachedRound = -1;
+let cachedComments: string[] = [];
+
+// Every set of 75 indices covers the complete round queue, even if a prior
+// round ended early. The ordering changes by round, and text stays unique.
+export function makeLiveComment(index: number, round?: number): string {
+  if (round !== undefined) {
+    if (cachedRound !== round) {
+      cachedRound = round;
+      cachedComments = liveRoundComments(round);
+    }
+    return cachedComments[((index % COMMENTS_PER_ROUND) + COMMENTS_PER_ROUND) % COMMENTS_PER_ROUND];
+  }
+  if (index % 7 === 5) return chat[Math.floor(index / 7) % chat.length];
+  return directions[(index - Math.floor((index + 1) / 7)) % directions.length];
+}
+
+const handleFirst = ["amber", "orbit", "moss", "pixel", "velvet", "moon", "cinder", "lilac", "paper", "echo", "honey", "cloud", "olive", "maple", "marble", "rune", "tin", "violet", "pebble", "fable", "jelly", "cobalt", "lumen", "fern"];
+const handleSecond = ["fox", "moth", "comet", "teacup", "static", "sparrow", "lantern", "noodle", "pocket", "rabbit", "glitch", "harbor", "button", "sprite", "otter", "whisper", "cricket", "aster", "clover", "drift", "signal", "cloud", "beacon", "biscuit"];
+
+export function makeLiveName(index: number, sceneIndex: number): string {
+  const serial = sceneIndex * 73 + index * 37;
+  const pair = serial % (handleFirst.length * handleSecond.length);
+  const first = handleFirst[pair % handleFirst.length];
+  const second = handleSecond[Math.floor(pair / handleFirst.length)];
+  const suffix = String(Math.floor(serial / (handleFirst.length * handleSecond.length)) % 100).padStart(2, "0");
+  switch ((index + sceneIndex) % 4) {
+    case 0: return `${first}_${second}`;
+    case 1: return `${first}.${second}`;
+    case 2: return `${first}${second}${suffix}`;
+    default: return `${second}of${first}`;
+  }
 }
