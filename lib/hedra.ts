@@ -29,6 +29,10 @@ function getApiKey() {
   return apiKey;
 }
 
+export function isHedraCreditError(message: string) {
+  return /\b402\b|insufficient (?:credits|balance|funds)/i.test(message);
+}
+
 async function hedraRequest(path: string, init?: RequestInit) {
   const response = await fetch(`${HEDRA_BASE_URL}${path}`, {
     ...init,

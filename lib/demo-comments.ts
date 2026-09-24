@@ -252,7 +252,6 @@ function shuffled<T>(items: T[], seed: number): T[] {
 const directions = shuffled(directionDeck, 0x643fe91b);
 const chat = shuffled(chatDeck, 0x517a92d1);
 
-const COMMENTS_PER_ROUND = 75;
 const secondaryDirections = uniqueComments([
   ...continuingActions,
   ...strangeDirections,
@@ -302,15 +301,20 @@ function liveRoundComments(round: number): string[] {
 let cachedRound = -1;
 let cachedComments: string[] = [];
 
-// Every set of 75 indices covers the complete round queue, even if a prior
-// round ended early. The ordering changes by round, and text stays unique.
+// The first 75 messages establish a coherent voting wave. A larger shuffled
+// deck keeps chat varied when a render takes longer than that first wave.
 export function makeLiveComment(index: number, round?: number): string {
   if (round !== undefined) {
     if (cachedRound !== round) {
       cachedRound = round;
-      cachedComments = liveRoundComments(round);
+      cachedComments = uniqueComments([
+        ...liveRoundComments(round),
+        ...shuffled(directions, round * 0x72e31b59),
+        ...shuffled(chat, round * 0x4b8d2f15),
+        ...shuffled(irrelevantChat, round * 0x5cb90437),
+      ]);
     }
-    return cachedComments[((index % COMMENTS_PER_ROUND) + COMMENTS_PER_ROUND) % COMMENTS_PER_ROUND];
+    return cachedComments[((index % cachedComments.length) + cachedComments.length) % cachedComments.length];
   }
   if (index % 7 === 5) return chat[Math.floor(index / 7) % chat.length];
   return directions[(index - Math.floor((index + 1) / 7)) % directions.length];

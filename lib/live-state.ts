@@ -11,8 +11,10 @@ export type StoryRow = {
   phase: string;
   round: number;
   scene_count: number;
+  generation: number;
   job_id: string | null;
   pending_action: string | null;
+  next_action: string | null;
   frame_key: string | null;
   next_poll_at: number;
   producer_seen_at: number;

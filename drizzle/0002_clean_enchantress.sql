@@ -1,0 +1,1 @@
+ALTER TABLE `live_story` ADD `next_action` text;

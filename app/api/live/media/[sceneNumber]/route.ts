@@ -33,7 +33,7 @@ export async function GET(request: Request, context: { params: Promise<{ sceneNu
     }
     const object = await bucket.get(scene.video_key, rangeHeader ? { range: { offset, length } } : undefined);
     if (!object) return new Response(null, { status: 404 });
-    const headers = new Headers({ "Accept-Ranges": "bytes", "Cache-Control": "public, max-age=3600" });
+    const headers = new Headers({ "Accept-Ranges": "bytes", "Cache-Control": "no-store" });
     object.writeHttpMetadata(headers);
     if (rangeHeader) {
       headers.set("Content-Range", `bytes ${offset}-${offset + length - 1}/${head.size}`);

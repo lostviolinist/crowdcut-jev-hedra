@@ -2,26 +2,55 @@
 
 import { FormEvent, useCallback, useEffect, useRef, useState } from "react";
 import Image from "next/image";
-import { ArrowUp, Clapperboard, Pause, Play, Radio, SkipForward } from "lucide-react";
+import { ArrowUp, Clapperboard, Pause, Play, Radio, SkipForward, Sparkles } from "lucide-react";
+import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from "@/components/ui/alert-dialog";
 import { makeLiveComment, makeLiveName } from "@/lib/demo-comments";
+import { MAX_COMMENTS_TO_CHOOSE, MIN_COMMENTS_TO_CHOOSE } from "@/lib/live-decision";
 import { captureSceneHandoffFromUrl } from "@/lib/scene-frame";
 import { OPENING_FRAME_PATH, STORY_TITLE } from "@/lib/story";
 import { locateSceneAtMs, sceneDurationMs, sceneStartMs, storyDurationMs } from "@/lib/story-timeline";
 
 type Scene = { number: number; action: string; cut_ms: number; created_at: number };
-type ChatComment = { id: number; name: string; body: string; action: string | null; created_at: number; audience: number };
+type ChatComment = { id: number; name: string; body: string; action: string | null; round: number; created_at: number; audience: number };
 type Idea = { id: string; action: string; votes: number; audienceVotes: number };
 type Snapshot = {
-  running: boolean; producerActive: boolean; phase: string; round: number; sceneCount: number; pendingAction: string | null;
-  error: string | null; scenes: Scene[]; comments: ChatComment[]; ideas: Idea[]; classifiedCount: number;
+  running: boolean; producerActive: boolean; phase: string; round: number; sceneCount: number; generation: number; pendingAction: string | null;
+  nextAction: string | null;
+  error: string | null; scenes: Scene[]; comments: ChatComment[]; ideas: Idea[]; classifiedCount: number; chatOnlyCount: number;
   isOwner: boolean; canComment: boolean; commentName: string | null;
 };
 
-const MAX_TEST_COMMENTS_PER_ROUND = 75;
-const MAX_TEST_COMMENTS_IN_FLIGHT = 16;
+const MAX_TEST_COMMENTS_PER_ROUND = 500;
+const MAX_TEST_COMMENTS_IN_FLIGHT = 24;
 const accents = ["#a970ff", "#39e6c5", "#ff7d9e", "#6fb8ff", "#ffbd69", "#b4a8ff"];
 
-function mediaUrl(number: number) { return `/api/live/media/${number}`; }
+function JevDecisionPanel({ snapshot, testChatEnabled, onTestChatChange }: {
+  snapshot: Snapshot | null;
+  testChatEnabled: boolean;
+  onTestChatChange: (enabled: boolean) => void;
+}) {
+  const classified = snapshot?.classifiedCount ?? 0;
+  const ideas = snapshot?.ideas.slice(0, 3) ?? [];
+  const highestVotes = Math.max(1, ...ideas.map((idea) => idea.votes));
+  const recent = snapshot?.comments.filter((comment) => comment.round === snapshot.round).slice(-2).reverse() ?? [];
+
+  return <section aria-label="Jev live decisions" className="shrink-0 border-b border-[#9147ff]/25 bg-[#21192e] px-4 py-3">
+    <div className="flex items-center justify-between gap-2">
+      <h2 className="flex items-center gap-2 text-sm font-bold text-white"><Sparkles size={16} className="text-[#bf94ff]" /> Jev is reading chat</h2>
+      <span className="text-xs font-medium tabular-nums text-[#bf94ff]">{classified} classified</span>
+    </div>
+    <div className="mt-2 h-1.5 overflow-hidden rounded-full bg-white/10"><div className="h-full rounded-full bg-[#a970ff] transition-[width] duration-500" style={{ width: `${Math.min(classified / MAX_COMMENTS_TO_CHOOSE, 1) * 100}%` }} /></div>
+    <p className="mt-1.5 text-xs text-white/55">Chooses after {MIN_COMMENTS_TO_CHOOSE}–{MAX_COMMENTS_TO_CHOOSE} comments · {snapshot?.chatOnlyCount ?? 0} chat-only</p>
+    {snapshot?.nextAction && <p className="mt-2 rounded border border-[#a970ff]/30 bg-[#a970ff]/15 px-2 py-1.5 text-xs text-[#e5d4ff]"><span className="font-bold">Jev chose next:</span> {snapshot.nextAction}</p>}
+    {!snapshot?.nextAction && snapshot?.pendingAction && <p className="mt-2 rounded border border-[#a970ff]/30 bg-[#a970ff]/15 px-2 py-1.5 text-xs text-[#e5d4ff]"><span className="font-bold">Now rendering:</span> {snapshot.pendingAction}</p>}
+    <div className="mt-3 flex items-center justify-between text-xs font-bold uppercase tracking-[0.12em] text-white/50"><span>Leading directions</span><span>Votes</span></div>
+    {ideas.length ? <div className="mt-1.5 space-y-1.5">{ideas.map((idea, index) => <div key={idea.id} className="flex items-center gap-2 text-sm"><span className="w-4 shrink-0 text-xs font-bold" style={{ color: accents[index] }}>{index + 1}</span><div className="min-w-0 flex-1"><p className="truncate text-white/85" title={idea.action}>{idea.action}</p><div className="mt-1 h-0.5 rounded bg-white/10"><div className="h-full rounded" style={{ width: `${idea.votes / highestVotes * 100}%`, backgroundColor: accents[index] }} /></div></div><span className="w-5 shrink-0 text-right font-semibold tabular-nums" style={{ color: accents[index] }}>{idea.votes}</span></div>)}</div> : <p className="mt-1.5 text-xs text-white/45">Reading the first directions…</p>}
+    {recent.length > 0 && <div className="mt-3 border-t border-white/10 pt-2"><p className="text-xs font-bold uppercase tracking-[0.12em] text-white/50">Just classified</p>{recent.map((comment) => <p key={comment.id} className="mt-1 truncate text-xs text-white/60" title={comment.body + " → " + (comment.action || "Chat only")}>“{comment.body}” <span className="text-[#bf94ff]">→ {comment.action || "Chat only"}</span></p>)}</div>}
+    {snapshot?.isOwner && <label className="mt-3 flex items-center gap-2 border-t border-white/10 pt-2 text-xs text-white/50"><input type="checkbox" checked={testChatEnabled} onChange={(event) => onTestChatChange(event.target.checked)} className="accent-[#9147ff]" /> Add demo chat</label>}
+  </section>;
+}
+
+function mediaUrl(number: number, generation: number) { return `/api/live/media/${number}?generation=${generation}`; }
 function formatTime(seconds: number) {
   const safe = Math.max(0, Math.floor(seconds));
   return `${Math.floor(safe / 60)}:${String(safe % 60).padStart(2, "0")}`;
@@ -35,6 +64,7 @@ export function SharedCrowdCut() {
   const [draft, setDraft] = useState("");
   const [sending, setSending] = useState(false);
   const [controlBusy, setControlBusy] = useState(false);
+  const [resetMessage, setResetMessage] = useState<string | null>(null);
   const [testChatEnabled, setTestChatEnabled] = useState(true);
   const [selectedScene, setSelectedScene] = useState(0);
   const [playhead, setPlayhead] = useState(0);
@@ -54,6 +84,7 @@ export function SharedCrowdCut() {
   const frameUploadingRef = useRef(false);
   const commentIndexRef = useRef(0);
   const testCommentsThisRoundRef = useRef(0);
+  const testCommentsRoundRef = useRef<number | null>(null);
   const testCommentsInFlightRef = useRef(0);
 
   const captureBridgeFrame = useCallback(() => {
@@ -111,7 +142,7 @@ export function SharedCrowdCut() {
 
   useEffect(() => {
     const initial = window.setTimeout(() => void load(), 0);
-    const timer = window.setInterval(() => void load(), 2000);
+    const timer = window.setInterval(() => void load(), 1000);
     return () => { window.clearTimeout(initial); window.clearInterval(timer); };
   }, [load]);
 
@@ -130,9 +161,10 @@ export function SharedCrowdCut() {
       try {
         const handoff = snapshot.sceneCount === 0
           ? { frame: await fetch(OPENING_FRAME_PATH).then((response) => { if (!response.ok) throw new Error("Opening frame unavailable."); return response.blob(); }), cutMs: 8000 }
-          : await captureSceneHandoffFromUrl(mediaUrl(snapshot.sceneCount));
+          : await captureSceneHandoffFromUrl(mediaUrl(snapshot.sceneCount, snapshot.generation));
         const form = new FormData();
         form.append("sceneNumber", String(snapshot.sceneCount));
+        form.append("generation", String(snapshot.generation));
         form.append("cutMs", String(handoff.cutMs));
         form.append("frame", handoff.frame, "scene-frame.png");
         const response = await fetch("/api/live/frame", { method: "POST", body: form });
@@ -150,29 +182,32 @@ export function SharedCrowdCut() {
       }
     };
     void upload();
-  }, [snapshot?.isOwner, snapshot?.phase, snapshot?.sceneCount, frameRetry, load]);
+  }, [snapshot?.isOwner, snapshot?.phase, snapshot?.sceneCount, snapshot?.generation, frameRetry, load]);
 
   useEffect(() => {
     if (!snapshot?.isOwner || !snapshot.running || !testChatEnabled) return;
     let timer: number | undefined;
     const round = snapshot.round;
-    testCommentsThisRoundRef.current = 0;
+    if (testCommentsRoundRef.current !== round) {
+      testCommentsRoundRef.current = round;
+      testCommentsThisRoundRef.current = 0;
+    }
     const sendNext = () => {
       if (testCommentsThisRoundRef.current >= MAX_TEST_COMMENTS_PER_ROUND) return;
       if (testCommentsInFlightRef.current < MAX_TEST_COMMENTS_IN_FLIGHT) {
-        const index = commentIndexRef.current++;
-        testCommentsThisRoundRef.current++;
+        const index = testCommentsThisRoundRef.current++;
+        const nameIndex = commentIndexRef.current++;
         testCommentsInFlightRef.current++;
         void fetch("/api/live/comments", {
           method: "POST", headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ body: makeLiveComment(index, round), name: makeLiveName(index, round), synthetic: true }),
+          body: JSON.stringify({ body: makeLiveComment(index, round), name: makeLiveName(nameIndex, round), synthetic: true }),
         }).catch(() => {}).finally(() => { testCommentsInFlightRef.current--; });
       }
-      // A busy-stream cadence gives Jev enough parallel work to classify the
-      // full audience wave while Hedra renders, with occasional natural gaps.
-      timer = window.setTimeout(sendNext, 20 + Math.random() * 55 + (Math.random() < 0.06 ? 180 + Math.random() * 180 : 0));
+      // The first directions arrive quickly enough for Jev to decide early;
+      // chat then continues at a readable, staggered pace through rendering.
+      timer = window.setTimeout(sendNext, testCommentsThisRoundRef.current < 24 ? 55 + Math.random() * 90 : 450 + Math.random() * 350);
     };
-    timer = window.setTimeout(sendNext, 75);
+    timer = window.setTimeout(sendNext, 40 + Math.random() * 90);
     return () => { if (timer) window.clearTimeout(timer); };
   }, [snapshot?.isOwner, snapshot?.running, snapshot?.round, testChatEnabled]);
 
@@ -223,7 +258,6 @@ export function SharedCrowdCut() {
   const totalDuration = storyDurationMs(scenes) / 1000;
   const activeStart = sceneStartMs(scenes, selectedScene) / 1000;
   const sceneCount = scenes.length;
-  const currentRoundVotes = snapshot?.ideas.reduce((sum, idea) => sum + idea.votes, 0) || 0;
   const liveStatus = !snapshot?.running ? "Story paused" : snapshot.producerActive ? "Live story" : "Waiting for host";
   const canSendComment = Boolean(snapshot?.running && snapshot.producerActive);
 
@@ -297,6 +331,7 @@ export function SharedCrowdCut() {
 
   async function control(action: "start" | "stop") {
     setControlBusy(true);
+    setResetMessage(null);
     try {
       const response = await fetch("/api/live/admin", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ action }) });
       const result = await response.json() as { error?: string };
@@ -308,12 +343,21 @@ export function SharedCrowdCut() {
   }
 
   async function resetStory() {
-    if (!window.confirm("Delete all scenes and comments from this story? This cannot be undone.")) return;
     setControlBusy(true);
+    setResetMessage("Preparing to reset the story…");
     try {
-      const response = await fetch("/api/live/admin", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ action: "reset" }) });
-      const result = await response.json() as { error?: string; mediaCleanupIncomplete?: boolean };
-      if (!response.ok) throw new Error(result.error || "Could not reset the story.");
+      const stopped = await fetch("/api/live/admin", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ action: "stop" }) });
+      if (!stopped.ok) throw new Error("Could not stop generation before resetting.");
+      const deadline = Date.now() + 5 * 60_000;
+      let mediaCleanupIncomplete = false;
+      while (true) {
+        const response = await fetch("/api/live/admin", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ action: "reset", resetIntent: "clear-current-story-v2" }) });
+        const result = await response.json() as { error?: string; retryable?: boolean; mediaCleanupIncomplete?: boolean };
+        if (response.ok) { mediaCleanupIncomplete = Boolean(result.mediaCleanupIncomplete); break; }
+        if (response.status !== 409 || !result.retryable || Date.now() >= deadline) throw new Error(result.error || "Could not reset the story.");
+        setResetMessage("Clearing the story…");
+        await new Promise((resolve) => window.setTimeout(resolve, 1500));
+      }
       setSelectedScene(0);
       setWaitingForNextScene(false);
       setBridgeFrame(null);
@@ -324,9 +368,10 @@ export function SharedCrowdCut() {
       seekRef.current = 0;
       knownScenesRef.current = 0;
       await load();
-      setCommentFeedback(result.mediaCleanupIncomplete ? "The story was reset, but some old video files could not be removed." : null);
+      setResetMessage(mediaCleanupIncomplete ? "Story reset, but some old video files could not be removed from storage." : "Story reset. Ready for a fresh start.");
+      setError(null);
     } catch (caught) {
-      setError(caught instanceof Error ? caught.message : "Could not reset the story.");
+      setResetMessage(caught instanceof Error ? caught.message : "Could not reset the story.");
     } finally { setControlBusy(false); }
   }
 
@@ -357,17 +402,31 @@ export function SharedCrowdCut() {
       <div className="min-w-0"><strong className="text-sm">CrowdCut</strong></div>
       <span className="ml-auto flex items-center gap-2 text-xs text-white/60"><Radio size={14} className="text-[#e91916]" />{liveStatus}</span>
       {snapshot?.isOwner && <button type="button" disabled={controlBusy} onClick={() => void control(snapshot.running ? "stop" : "start")} className="rounded border border-white/15 bg-white/5 px-3 py-2 text-sm font-medium hover:bg-white/10 disabled:opacity-50">{snapshot.running ? "Stop generation" : "Start generation"}</button>}
-      {snapshot?.isOwner && !snapshot.running && <button type="button" disabled={controlBusy} onClick={() => void resetStory()} className="rounded border border-white/15 px-3 py-2 text-sm text-white/55 hover:border-rose-400/40 hover:text-rose-200 disabled:opacity-50">Reset story</button>}
+      {snapshot?.isOwner && <AlertDialog>
+        <AlertDialogTrigger asChild><button type="button" disabled={controlBusy} className="rounded border border-rose-500 bg-rose-600 px-3 py-2 text-sm font-semibold text-white hover:border-rose-400 hover:bg-rose-500 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-rose-300 disabled:cursor-not-allowed disabled:opacity-50">{controlBusy && resetMessage ? "Resetting…" : "Reset story"}</button></AlertDialogTrigger>
+        <AlertDialogContent className="border-white/20 bg-[#1f1f23] text-white">
+          <AlertDialogHeader>
+            <AlertDialogTitle>Delete this story and start over?</AlertDialogTitle>
+            <AlertDialogDescription className="text-white/70">This permanently deletes {snapshot.scenes.length} scene{snapshot.scenes.length === 1 ? "" : "s"} and all comments. A scene already submitted to Hedra may still incur a charge, but won&apos;t appear in the restarted story.</AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel className="border-white/20 bg-white/5 text-white hover:bg-white/10 hover:text-white">Keep story</AlertDialogCancel>
+            <AlertDialogAction variant="destructive" className="bg-rose-600 text-white hover:bg-rose-500" onClick={() => void resetStory()}>Delete story and reset</AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>}
     </header>
+    {resetMessage && <div role="status" className="border-b border-[#9147ff]/25 bg-[#21192e] px-5 py-3 text-sm text-[#e5d4ff]">{resetMessage}</div>}
     {(error || snapshot?.error) && <div role="alert" className="border-b border-rose-400/25 bg-rose-400/10 px-5 py-3 text-sm text-rose-100">{error || snapshot?.error}</div>}
     <div className="mx-auto grid max-w-[1700px] lg:grid-cols-[minmax(0,1fr)_370px]">
       <section className="min-w-0 p-4 sm:p-6"><div className="mx-auto max-w-[1120px]">
         <div className="mb-4"><h1 className="text-2xl font-semibold tracking-tight sm:text-3xl">{STORY_TITLE}</h1><p className="mt-2 text-sm text-white/55">The audience chooses Sophie&apos;s next move. Watch live or catch up from the beginning.</p></div>
+        <div className="mb-3 rounded border border-[#9147ff]/30 bg-[#21192e] px-3 py-2 text-sm text-white/80 lg:hidden"><span className="font-bold text-[#bf94ff]">Jev live</span> · {snapshot?.classifiedCount ?? 0} classified · {snapshot?.ideas[0]?.action || "Reading chat"}</div>
         <div className="relative aspect-video overflow-hidden rounded-lg border border-white/10 bg-black shadow-2xl">
           {(!activeScene || (!videoReady && !bridgeFrame)) && <Image src={OPENING_FRAME_PATH} alt="Sophie opens the door of a moving castle." fill priority className="object-cover" sizes="(max-width: 1024px) 100vw, 70vw" />}
           {activeScene && <video
             ref={videoRef}
-            src={mediaUrl(activeScene.number)}
+            src={mediaUrl(activeScene.number, snapshot?.generation ?? 0)}
             playsInline
             preload="auto"
             className={`absolute inset-0 size-full object-cover ${videoReady ? "opacity-100" : "opacity-0"}`}
@@ -410,15 +469,13 @@ export function SharedCrowdCut() {
             <button type="button" onClick={goLive} disabled={!activeScene} className="flex shrink-0 items-center gap-1 rounded bg-[#9147ff]/20 px-2 py-1.5 text-xs font-semibold text-[#bf94ff] disabled:opacity-40"><SkipForward size={14} /> Go live</button>
           </div>
           <div className="mt-2 flex flex-wrap items-center justify-between gap-2 text-sm">
-            <div><p className="text-white/80">{activeScene ? `Scene ${activeScene.number}: ${activeScene.action}` : "Opening scene"}</p>{snapshot?.pendingAction && <p className="text-[#bf94ff]">Audience chose next: {snapshot.pendingAction}</p>}</div>
+            <div><p className="text-white/80">{activeScene ? `Scene ${activeScene.number}: ${activeScene.action}` : "Opening scene"}</p>{snapshot?.nextAction ? <p className="text-[#bf94ff]">Jev chose next: {snapshot.nextAction}</p> : snapshot?.pendingAction && <p className="text-[#bf94ff]">Rendering: {snapshot.pendingAction}</p>}</div>
             <span className="text-xs text-white/45">H3 Max Turbo · 480p · 8s · {scenes.length} scene{scenes.length === 1 ? "" : "s"}</span>
           </div>
         </div>
-        <div className="mb-3 mt-7"><h2 className="text-lg font-semibold">Audience directions</h2><p className="text-sm text-white/45">Jev has reviewed {snapshot?.classifiedCount ?? 0} comments this round. Viewer directions take priority in the next scene.</p></div>
-        {snapshot?.ideas.length ? <div className="grid gap-3 sm:grid-cols-2">{snapshot.ideas.map((idea, index) => <div key={idea.id} className="rounded-lg border border-white/10 bg-[#18181b] p-4"><div className="flex items-start gap-3"><span className="grid size-8 shrink-0 place-items-center rounded" style={{ background: accents[index] + "22", color: accents[index] }}>{index + 1}</span><div className="min-w-0 flex-1"><p className="text-sm font-semibold">{idea.action}</p><div className="mt-3 h-1 rounded bg-white/10"><div className="h-1 rounded" style={{ width: Math.round(idea.votes / currentRoundVotes * 100) + "%", background: accents[index] }} /></div></div><span className="text-sm font-bold" style={{ color: accents[index] }}>{idea.votes}</span></div></div>)}</div> : <div className="rounded-lg border border-dashed border-white/15 bg-[#18181b] p-6 text-center text-sm text-white/45">The next audience directions are taking shape.</div>}
-        {snapshot?.isOwner && <label className="mt-4 flex items-center gap-2 text-xs text-white/50"><input type="checkbox" checked={testChatEnabled} onChange={(event) => setTestChatEnabled(event.target.checked)} className="accent-[#9147ff]" /> Add demo chat</label>}
       </div></section>
-      <aside className="flex min-h-[520px] flex-col border-t border-white/10 bg-[#18181b] lg:h-[calc(100vh-64px)] lg:border-l lg:border-t-0">
+      <aside className="flex min-h-[520px] flex-col border-t border-white/10 bg-[#18181b] lg:sticky lg:top-0 lg:h-[calc(100vh-64px)] lg:border-l lg:border-t-0">
+        <JevDecisionPanel snapshot={snapshot} testChatEnabled={testChatEnabled} onTestChatChange={setTestChatEnabled} />
         <div className="border-b border-white/10 px-4 py-3"><h2 className="text-sm font-semibold">Live chat</h2><p className="mt-0.5 text-xs text-white/40">{snapshot?.commentName ? `You’re ${snapshot.commentName}. Your suggestions join the live story.` : "Your suggestions join the same story everyone is watching."}</p></div>
         <div ref={chatRef} onScroll={(event) => { const chat = event.currentTarget; stickToBottomRef.current = chat.scrollHeight - chat.scrollTop - chat.clientHeight < 100; }} className="flex-1 space-y-3 overflow-y-auto px-4 py-4">{snapshot?.comments.length ? snapshot.comments.map((comment) => <div key={comment.id} className={`text-sm leading-snug ${comment.id === lastSentId ? "rounded border border-[#9147ff]/50 bg-[#9147ff]/10 p-2" : ""}`}><span className={`mr-2 font-semibold ${comment.audience ? "text-[#39e6c5]" : "text-[#bf94ff]"}`}>{comment.name}</span><span className="text-white/75">{comment.body}</span><p className="mt-1 text-[11px] text-white/35">{comment.action ? `Jev → ${comment.action}` : "Chat only · not a story vote"}</p></div>) : <p className="pt-8 text-center text-sm text-white/35">The audience is arriving…</p>}</div>
         {snapshot?.canComment ? <div className="border-t border-white/10 bg-[#18181b]"><form onSubmit={submitComment} className="flex gap-2 p-3"><input value={draft} onChange={(event) => { setDraft(event.target.value); setCommentFeedback(null); }} maxLength={500} placeholder={snapshot.running && !snapshot.producerActive ? "Waiting for the host to reconnect…" : "Suggest what Sophie does next…"} disabled={!canSendComment || sending} className="min-w-0 flex-1 rounded border border-white/10 bg-[#0e0e10] px-3 py-2 text-sm outline-none focus:border-[#9147ff] disabled:opacity-50" /><button type="submit" disabled={!draft.trim() || !canSendComment || sending} className="rounded bg-[#9147ff] px-3 disabled:opacity-40" aria-label="Send suggestion"><ArrowUp size={17} /></button></form>{commentFeedback && <p role="status" className="px-3 pb-3 text-xs text-[#bf94ff]">{commentFeedback}</p>}</div> : <a href="/signin-with-chatgpt?return_to=%2F" target="_top" className="border-t border-white/10 p-4 text-center text-sm text-[#bf94ff]">Sign in to comment</a>}

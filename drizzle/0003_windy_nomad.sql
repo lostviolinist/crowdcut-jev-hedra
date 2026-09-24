@@ -1,0 +1,1 @@
+ALTER TABLE `live_story` ADD `generation` integer DEFAULT 0 NOT NULL;
