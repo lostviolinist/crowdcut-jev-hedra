@@ -2,6 +2,8 @@
 
 # dependencies
 /node_modules
+/producer/node_modules
+/producer/.wrangler
 /.pnp
 .pnp.*
 .yarn/*

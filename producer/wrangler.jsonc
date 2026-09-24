@@ -1,0 +1,20 @@
+{
+  "$schema": "./node_modules/wrangler/config-schema.json",
+  "name": "crowdcut-producer",
+  "main": "src/index.ts",
+  "account_id": "2bff3e55c229cb5a1fb59716f745665f",
+  "compatibility_date": "2026-09-23",
+  "compatibility_flags": ["nodejs_compat"],
+  "workers_dev": true,
+  "vars": {
+    "SITE_ORIGIN": "https://crowdcut-jev-hedra.hedra-8992.chatgpt.site"
+  },
+  "browser": {
+    "binding": "BROWSER"
+  },
+  "durable_objects": {
+    "bindings": [{ "name": "STORY", "class_name": "StoryProducer" }]
+  },
+  "migrations": [{ "tag": "v1", "new_sqlite_classes": ["StoryProducer"] }],
+  "triggers": { "crons": ["* * * * *"] }
+}

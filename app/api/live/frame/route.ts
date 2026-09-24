@@ -1,9 +1,9 @@
-import { getLiveBucket, getLiveDb, getStory, isOwner, serverError } from "@/lib/live-state";
+import { getLiveBucket, getLiveDb, getStory, isOwner, isProducer, serverError } from "@/lib/live-state";
 
 export const runtime = "edge";
 
 export async function POST(request: Request) {
-  if (!isOwner(request)) return Response.json({ error: "Owner access required." }, { status: 403 });
+  if (!isOwner(request) && !isProducer(request)) return Response.json({ error: "Producer access required." }, { status: 403 });
   try {
     const form = await request.formData();
     const sceneNumber = Number(form.get("sceneNumber"));

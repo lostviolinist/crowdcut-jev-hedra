@@ -14,7 +14,7 @@ type Scene = { number: number; action: string; cut_ms: number; created_at: numbe
 type ChatComment = { id: number; name: string; body: string; action: string | null; round: number; created_at: number; audience: number };
 type Idea = { id: string; action: string; votes: number; audienceVotes: number };
 type Snapshot = {
-  running: boolean; producerActive: boolean; phase: string; round: number; sceneCount: number; generation: number; pendingAction: string | null;
+  running: boolean; producerActive: boolean; externalProducer: boolean; phase: string; round: number; sceneCount: number; generation: number; pendingAction: string | null;
   nextAction: string | null;
   error: string | null; scenes: Scene[]; comments: ChatComment[]; ideas: Idea[]; classifiedCount: number; chatOnlyCount: number;
   isOwner: boolean; canComment: boolean; commentName: string | null;
@@ -46,7 +46,7 @@ function JevDecisionPanel({ snapshot, testChatEnabled, onTestChatChange }: {
     <div className="mt-3 flex items-center justify-between text-xs font-bold uppercase tracking-[0.12em] text-white/50"><span>Leading directions</span><span>Votes</span></div>
     {ideas.length ? <div className="mt-1.5 space-y-1.5">{ideas.map((idea, index) => <div key={idea.id} className="flex items-center gap-2 text-sm"><span className="w-4 shrink-0 text-xs font-bold" style={{ color: accents[index] }}>{index + 1}</span><div className="min-w-0 flex-1"><p className="truncate text-white/85" title={idea.action}>{idea.action}</p><div className="mt-1 h-0.5 rounded bg-white/10"><div className="h-full rounded" style={{ width: `${idea.votes / highestVotes * 100}%`, backgroundColor: accents[index] }} /></div></div><span className="w-5 shrink-0 text-right font-semibold tabular-nums" style={{ color: accents[index] }}>{idea.votes}</span></div>)}</div> : <p className="mt-1.5 text-xs text-white/45">Reading the first directions…</p>}
     {recent.length > 0 && <div className="mt-3 border-t border-white/10 pt-2"><p className="text-xs font-bold uppercase tracking-[0.12em] text-white/50">Just classified</p>{recent.map((comment) => <p key={comment.id} className="mt-1 truncate text-xs text-white/60" title={comment.body + " → " + (comment.action || "Chat only")}>“{comment.body}” <span className="text-[#bf94ff]">→ {comment.action || "Chat only"}</span></p>)}</div>}
-    {snapshot?.isOwner && <label className="mt-3 flex items-center gap-2 border-t border-white/10 pt-2 text-xs text-white/50"><input type="checkbox" checked={testChatEnabled} onChange={(event) => onTestChatChange(event.target.checked)} className="accent-[#9147ff]" /> Add demo chat</label>}
+    {snapshot?.isOwner && !snapshot.externalProducer && <label className="mt-3 flex items-center gap-2 border-t border-white/10 pt-2 text-xs text-white/50"><input type="checkbox" checked={testChatEnabled} onChange={(event) => onTestChatChange(event.target.checked)} className="accent-[#9147ff]" /> Add demo chat</label>}
   </section>;
 }
 
@@ -147,15 +147,15 @@ export function SharedCrowdCut() {
   }, [load]);
 
   useEffect(() => {
-    if (!snapshot?.isOwner) return;
+    if (!snapshot?.isOwner || snapshot.externalProducer) return;
     const tick = () => void fetch("/api/live/tick", { method: "POST" }).catch(() => {});
     tick();
     const timer = window.setInterval(tick, 1000);
     return () => window.clearInterval(timer);
-  }, [snapshot?.isOwner]);
+  }, [snapshot?.isOwner, snapshot?.externalProducer]);
 
   useEffect(() => {
-    if (!snapshot?.isOwner || snapshot.phase !== "awaiting_frame" || frameUploadingRef.current) return;
+    if (!snapshot?.isOwner || snapshot.externalProducer || snapshot.phase !== "awaiting_frame" || frameUploadingRef.current) return;
     frameUploadingRef.current = true;
     const upload = async () => {
       try {
@@ -182,10 +182,10 @@ export function SharedCrowdCut() {
       }
     };
     void upload();
-  }, [snapshot?.isOwner, snapshot?.phase, snapshot?.sceneCount, snapshot?.generation, frameRetry, load]);
+  }, [snapshot?.isOwner, snapshot?.externalProducer, snapshot?.phase, snapshot?.sceneCount, snapshot?.generation, frameRetry, load]);
 
   useEffect(() => {
-    if (!snapshot?.isOwner || !snapshot.running || !testChatEnabled) return;
+    if (!snapshot?.isOwner || snapshot.externalProducer || !snapshot.running || !testChatEnabled) return;
     let timer: number | undefined;
     const round = snapshot.round;
     if (testCommentsRoundRef.current !== round) {
@@ -209,7 +209,7 @@ export function SharedCrowdCut() {
     };
     timer = window.setTimeout(sendNext, 40 + Math.random() * 90);
     return () => { if (timer) window.clearTimeout(timer); };
-  }, [snapshot?.isOwner, snapshot?.running, snapshot?.round, testChatEnabled]);
+  }, [snapshot?.isOwner, snapshot?.externalProducer, snapshot?.running, snapshot?.round, testChatEnabled]);
 
   const newestCommentId = snapshot?.comments.at(-1)?.id;
   useEffect(() => {
@@ -401,6 +401,7 @@ export function SharedCrowdCut() {
       <span className="grid size-9 place-items-center rounded-md bg-[#9147ff]"><Clapperboard size={19} /></span>
       <div className="min-w-0"><strong className="text-sm">CrowdCut</strong></div>
       <span className="ml-auto flex items-center gap-2 text-xs text-white/60"><Radio size={14} className="text-[#e91916]" />{liveStatus}</span>
+      {snapshot && !snapshot.isOwner && <a href="/signin-with-chatgpt?return_to=%2F" className="rounded border border-white/15 px-3 py-2 text-sm text-white/70 hover:bg-white/10 hover:text-white">Sign in</a>}
       {snapshot?.isOwner && <button type="button" disabled={controlBusy} onClick={() => void control(snapshot.running ? "stop" : "start")} className="rounded border border-white/15 bg-white/5 px-3 py-2 text-sm font-medium hover:bg-white/10 disabled:opacity-50">{snapshot.running ? "Stop generation" : "Start generation"}</button>}
       {snapshot?.isOwner && <AlertDialog>
         <AlertDialogTrigger asChild><button type="button" disabled={controlBusy} className="rounded border border-rose-500 bg-rose-600 px-3 py-2 text-sm font-semibold text-white hover:border-rose-400 hover:bg-rose-500 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-rose-300 disabled:cursor-not-allowed disabled:opacity-50">{controlBusy && resetMessage ? "Resetting…" : "Reset story"}</button></AlertDialogTrigger>

@@ -58,6 +58,24 @@ export async function POST(request: Request) {
     if (input.action === "start" && (story.phase === "submitting" || story.phase === "resetting")) return Response.json({ error: "The story is still finishing its previous operation." }, { status: 409 });
     await db.prepare("UPDATE live_story SET running = ?, producer_seen_at = ?, error = NULL WHERE id = 1")
       .bind(input.action === "start" ? 1 : 0, input.action === "start" ? Date.now() : 0).run();
+    if (input.action === "start" && process.env.CROWDCUT_EXTERNAL_PRODUCER === "1") {
+      const url = process.env.CROWDCUT_PRODUCER_URL;
+      const secret = process.env.CROWDCUT_PRODUCER_SECRET;
+      if (url && secret) {
+        try {
+          const wake = await fetch(new URL("/wake", url), {
+            method: "POST",
+            headers: { Authorization: `Bearer ${secret}` },
+            signal: AbortSignal.timeout(2500),
+          });
+          if (!wake.ok) console.error("CrowdCut producer wake failed", wake.status);
+        } catch (error) {
+          // The worker also checks once a minute, so a wake failure must not
+          // erase the owner's Start action.
+          console.error("CrowdCut producer wake unavailable", error);
+        }
+      }
+    }
     return Response.json({ running: input.action === "start" });
   } catch (error) {
     return serverError(error);

@@ -26,6 +26,13 @@ export function isOwner(request: Request) {
   return Boolean(user && OWNER_USER_ID && OWNER_EMAIL && user.id === OWNER_USER_ID && user.email.toLowerCase() === OWNER_EMAIL);
 }
 
+// The off-site producer can advance the shared story, but cannot call the
+// owner-only start/stop/reset endpoint. Keep this credential server-side.
+export function isProducer(request: Request) {
+  const secret = process.env.CROWDCUT_PRODUCER_SECRET?.trim();
+  return Boolean(secret && request.headers.get("authorization") === `Bearer ${secret}`);
+}
+
 export function currentUser(request: Request) {
   const id = request.headers.get("oai-authenticated-user-id");
   const email = request.headers.get("oai-authenticated-user-email");

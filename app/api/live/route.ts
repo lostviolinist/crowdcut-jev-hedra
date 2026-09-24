@@ -23,6 +23,7 @@ export async function GET(request: Request) {
     return Response.json({
       running: Boolean(story.running),
       producerActive: Boolean(story.running && Date.now() - story.producer_seen_at < 60_000),
+      externalProducer: process.env.CROWDCUT_EXTERNAL_PRODUCER === "1",
       phase: story.phase,
       round: story.round,
       sceneCount: story.scene_count,

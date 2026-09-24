@@ -1,6 +1,6 @@
 import { classifyAudienceComment } from "@/lib/jev";
 import { guestIdentity } from "@/lib/guest-identity";
-import { currentUser, getLiveDb, getStory, isOwner, serverError } from "@/lib/live-state";
+import { currentUser, getLiveDb, getStory, isOwner, isProducer, serverError } from "@/lib/live-state";
 import { formatAudienceActionLabel } from "@/lib/story-ideas";
 
 export const runtime = "edge";
@@ -10,8 +10,9 @@ type Idea = { id: string; action: string };
 export async function POST(request: Request) {
   try {
     const user = currentUser(request);
-    const guest = user ? null : await guestIdentity(request, false);
-    if (!user && !guest) return Response.json({ error: "Refresh the page to join the chat." }, { status: 401 });
+    const producer = isProducer(request);
+    const guest = user || producer ? null : await guestIdentity(request, false);
+    if (!user && !guest && !producer) return Response.json({ error: "Refresh the page to join the chat." }, { status: 401 });
     if (!process.env.TYPESAFE_API_KEY?.trim()) return Response.json({ error: "Jev is unavailable." }, { status: 503 });
     const input = await request.json() as { body?: unknown; synthetic?: unknown; name?: unknown };
     const body = typeof input.body === "string" ? input.body.replace(/\s+/g, " ").trim() : "";
@@ -20,7 +21,8 @@ export async function POST(request: Request) {
     if (/(?:https?:\/\/|www\.)\S+|[\w.+-]+@[\w.-]+\.[A-Za-z]{2,}|\b(?:system prompt|api key|ignore (?:all )?(?:previous|prior|above) instructions)\b/i.test(body)) {
       return Response.json({ error: "This comment can't be shown in the live story. Please try another suggestion." }, { status: 422 });
     }
-    const synthetic = input.synthetic === true && isOwner(request);
+    const synthetic = input.synthetic === true && (isOwner(request) || producer);
+    if (producer && !synthetic) return Response.json({ error: "Producer comments must be synthetic." }, { status: 403 });
     if (input.synthetic === true && !synthetic) return Response.json({ error: "Not allowed." }, { status: 403 });
     const db = getLiveDb();
     const story = await getStory(db);

@@ -1,5 +1,5 @@
 import { getHedraJob, isHedraCreditError, submitStoryGeneration } from "@/lib/hedra";
-import { getLiveBucket, getLiveDb, getStory, isOwner, serverError } from "@/lib/live-state";
+import { getLiveBucket, getLiveDb, getStory, isOwner, isProducer, serverError } from "@/lib/live-state";
 import { formatAudienceActionLabel } from "@/lib/story-ideas";
 import { MIN_COMMENTS_TO_CHOOSE, readyToChooseScene } from "@/lib/live-decision";
 
@@ -9,7 +9,7 @@ type Winner = { action: string; votes: number; audienceVotes: number };
 type Job = { job_id?: string; status?: string; outputs?: Array<{ url?: string; content_type?: string }>; error?: string | { message?: string } };
 
 export async function POST(request: Request) {
-  if (!isOwner(request)) return Response.json({ error: "Owner access required." }, { status: 403 });
+  if (!isOwner(request) && !isProducer(request)) return Response.json({ error: "Producer access required." }, { status: 403 });
   try {
     const db = getLiveDb();
     const now = Date.now();
