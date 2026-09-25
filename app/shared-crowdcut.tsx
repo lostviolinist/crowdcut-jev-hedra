@@ -81,6 +81,7 @@ export function SharedCrowdCut() {
   const stickToBottomRef = useRef(true);
   const seekRef = useRef<number | null>(null);
   const knownScenesRef = useRef(0);
+  const initialSnapshotLoadedRef = useRef(false);
   const frameUploadingRef = useRef(false);
   const commentIndexRef = useRef(0);
   const testCommentsThisRoundRef = useRef(0);
@@ -218,8 +219,17 @@ export function SharedCrowdCut() {
   }, [newestCommentId]);
 
   useEffect(() => {
+    if (!snapshot) return;
     const scenes = snapshot?.scenes || [];
     const count = scenes.length;
+    // Existing scenes are the movie a late viewer came to watch, not new
+    // arrivals to follow. Only future scenes should trigger live-edge logic.
+    if (!initialSnapshotLoadedRef.current) {
+      initialSnapshotLoadedRef.current = true;
+      knownScenesRef.current = count;
+      if (count > 0) setFollowLive(false);
+      return;
+    }
     if (count < knownScenesRef.current) {
       seekRef.current = 0;
       setSelectedScene(0);
@@ -239,7 +249,7 @@ export function SharedCrowdCut() {
       }
     }
     knownScenesRef.current = count;
-  }, [snapshot?.scenes, followLive, playhead, autoplayBlocked, switchScene]);
+  }, [snapshot, followLive, playhead, autoplayBlocked, switchScene]);
 
   useEffect(() => {
     const video = videoRef.current;
